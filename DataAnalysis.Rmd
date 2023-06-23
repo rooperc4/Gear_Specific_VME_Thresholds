@@ -1,0 +1,322 @@
+---
+title: "NPFC Gear and Taxa Specific Thresholds for VME Bycatch"
+author: "Chris Rooper, Glen Campbell, Vanessa Tuttle"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(gfdata)
+# load packages
+library(DBI)
+library(dplyr)
+library(BottomFishingFootprint)
+library(ggmap)
+library(viridis)
+library(rgdal)
+library(sp)
+library(plyr)
+library(sf)
+# Load util.R gfdata functions
+source("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/r-sql-link-functions.R")
+source("C:/Users/rooperc/Documents/Chris Work Stuff/R Software Help and Functions/Miscellaneous Functions/dist_xy.R")
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abstract
+
+# Introduction
+
+# Methods
+
+
+```{r importdata,echo=FALSE,results='hide',message=FALSE,warning=FALSE,cache=TRUE}
+
+#Alaska data - From Glenn Campbell, AFSC Observer Program
+AlaskaData<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/alaska_haul_data.csv",header=TRUE)
+AlaskaData<-data.frame(Year=AlaskaData$YEAR,Haul=AlaskaData$HAUL_NUMBER,Gear=AlaskaData$GEAR_TYPE,Region=AlaskaData$AREA,Species=AlaskaData$SPECIES_NAME,Weight=AlaskaData$SPECIES_EXTRAPOLATED_HAUL_WEIGHT_KG)
+
+#West Coast data - From Vanessa Tuttle and Kayleigh Somers, NWFSC FRAM
+
+
+
+
+
+
+
+#DFO Data - Extracted directly from GFBio
+# Bug in DBI sometimes throws 'invalid description error'
+# If it occurs, look at the order of colums in type and sort the query
+# index <- dbColumnInfo( dbSendQuery(db_connection(), sql ))
+# index$type <- as.integer(index$type)     
+# c(which(index$type>=0),which(index$type<0))
+
+#---------------------------------------------------------------------#
+# List of coral and sponge hart codes
+# load csv
+#hartcodes <- read.csv("Species/SpeciesCodes_fromGFBio.csv", stringsAsFactors = F)
+csdat <- read.csv("C:/github/corals-sponges-dataset/AllCoralSponge_HartCodes_Groups_Master.csv", stringsAsFactors = F)
+cwcs <- as.character( csdat$SPECIES_CODE )
+
+#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM GFBioSQL.dbo.CATCH")
+
+#---------------------------------------------------------------------#
+# Get gfbio survey data with coral and sponge observations
+gf_sql <- readLines("./sql/get-gfbio-records.sql")
+# Add to cwcs species to WHERE clause
+gf_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, gf_sql)
+gf_sql <- paste(gf_sql, collapse = "\n")
+# Run query
+gf_d <- DBI::dbGetQuery( db_connection(), gf_sql )
+
+# Remove duplicate records
+gf_d <- gf_d[!duplicated(gf_d),]
+
+# Summaries
+dim(gf_d)
+head(gf_d)
+table(gf_d$SURVEY)
+table(gf_d$SPECIES_SCIENCE_NAME)
+
+
+#---------------------------------------------------------------------#
+# Get PacHarvHL data with coral and sponge by-catch records
+#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvHL.dbo.B4_Catches")
+
+pachl_sql <- readLines("./sql/get-pacharvhl-records.sql")
+# Add to cwcs species to WHERE clause
+pachl_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pachl_sql)
+pachl_sql <- paste(pachl_sql, collapse = "\n")
+# Run query
+pachl_d <- DBI::dbGetQuery( db_connection(), pachl_sql )
+
+# Check for duplicates of species records from a single finishing event
+dup_ind <- paste(pachl_d$TRIP_ID, pachl_d$SET_ID, pachl_d$SPECIES_CODE, sep="-")
+if ( any(duplicated(dup_ind)) ){
+  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+  # show duplicated records
+  print( pachl_d[inds,] )
+  # Remove duplicate records
+  pachl_d <- pachl_d[!duplicated(pachl_d),]
+}
+
+# Summaries
+dim(pachl_d)
+head(pachl_d)
+table(pachl_d$FISHERY_SECTOR)
+table(pachl_d$SPECIES_SCIENCE_NAME)
+
+
+
+
+#---------------------------------------------------------------------#
+# Get PacHarvest (trawl) data with coral and sponge by-catch records
+#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvest.dbo.D_Official_Catch")
+pactrawl_sql <- readLines("./sql/get-pacharvtrawl-records.sql")
+# Add to cwcs species to WHERE clause
+pactrawl_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pactrawl_sql)
+pactrawl_sql <- paste(pactrawl_sql, collapse = "\n")
+# Run query
+pactrawl_d <- DBI::dbGetQuery( db_connection(), pactrawl_sql )
+
+# Check for duplicates of species records from a single finishing event
+dup_ind <- paste(pactrawl_d$TRIP_ID, pactrawl_d$SET_ID, pactrawl_d$SPECIES_CODE, sep="-")
+if ( any (duplicated(dup_ind)) ){
+  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+  # show duplicated records
+  print( pactrawl_d[inds,] )
+  # Remove duplicate records
+  pactrawl_d <- pactrawl_d[!duplicated(pactrawl_d),]
+}
+
+# Summaries
+dim(pactrawl_d)
+head(pactrawl_d)
+table(pactrawl_d$FISHERY_SECTOR)
+table(pactrawl_d$SPECIES_SCIENCE_NAME)
+
+
+
+
+#---------------------------------------------------------------------#
+# Get PacHarvSable data with coral and sponge by-catch records
+#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvSable.dbo.D_Official_Catch")
+pacsable_sql <- readLines("./sql/get-pacharvsable-records.sql")
+# Add to cwcs species to WHERE clause
+pacsable_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pacsable_sql)
+pacsable_sql <- paste(pacsable_sql, collapse = "\n")
+# Run query
+pacsable_d <- DBI::dbGetQuery( db_connection(), pacsable_sql )
+
+# Check for duplicates of species records from a single finishing event
+dup_ind <- paste(pacsable_d$TRIP_ID, pacsable_d$SET_ID, pacsable_d$SPECIES_CODE, sep="-")
+if ( any (duplicated(dup_ind)) ){
+  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+  # show duplicated records
+  print( pacsable_d[inds,] )
+  # Remove duplicate records
+  pacsable_d <- pacsable_d[!duplicated(pacsable_d),]
+}
+
+# Summaries
+dim(pacsable_d)
+head(pacsable_d)
+table(pacsable_d$FISHERY_SECTOR)
+table(pacsable_d$SPECIES_SCIENCE_NAME)
+
+
+
+#---------------------------------------------------------------------#
+# Get FOS data with coral and sponge by-catch records
+#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM GFFOS.dbo.GF_D_OFFICIAL_FE_CATCH")
+fos_sql <- readLines("./sql/get-fos-records.sql")
+# Add to cwcs species to WHERE clause
+fos_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, fos_sql)
+fos_sql <- paste(fos_sql, collapse = "\n")
+# Run query
+fos_d <- DBI::dbGetQuery( db_connection(), fos_sql )
+
+# Check for duplicates of species records from a single finishing event
+dup_ind <- paste(fos_d$TRIP_ID, fos_d$EVENT_ID, fos_d$SPECIES_CODE, sep="-")
+if ( any (duplicated(dup_ind)) ){
+  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+  # show duplicated records
+  print( fos_d[inds,] )
+  # Remove duplicate records
+  fos_d <- fos_d[!duplicated(fos_d),]
+}
+
+# Remove Event_ID 551255, duplicate with IPHC survey event
+fos_d <- fos_d[fos_d$EVENT_ID != 551255,]
+
+# Summaries
+dim(fos_d)
+head(fos_d)
+table(fos_d$FISHERY_SECTOR)
+table(fos_d$SPECIES_SCIENCE_NAME)
+
+
+
+
+#---------------------------------------------------------------------#
+# Combine
+
+# Type
+gf_d$Type <- "Research"
+pachl_d$Type <- "Fishery"
+pactrawl_d$Type <-  "Fishery"
+pacsable_d$Type <- "Fishery"
+fos_d$Type <- "Fishery"
+
+# Source
+gf_d$Source <- "GFBio"
+pachl_d$Source <- "PacHL"
+pactrawl_d$Source <-  "PacTrawl"
+pacsable_d$Source <- "PacSable"
+fos_d$Source <- "FOS"
+
+# Survey or fishery section
+pachl_d$SURVEY <- pachl_d$FISHERY_SECTOR
+pactrawl_d$SURVEY <-  pactrawl_d$FISHERY_SECTOR
+pacsable_d$SURVEY <- pacsable_d$FISHERY_SECTOR
+fos_d$SURVEY <- fos_d$FISHERY_SECTOR
+
+# Add fishing event or set field for those missing one
+pachl_d$EVENT_ID <- paste(pachl_d$TRIP_ID, pachl_d$SET_ID, sep="_")
+pactrawl_d$EVENT_ID <-  paste(pactrawl_d$TRIP_ID, pactrawl_d$SET_ID, sep="_")
+
+#Add CATCH WEIGHT AND COUNT COLUMNS
+pachl_d$CATCH_WEIGHT <- pachl_d$OBFL_EST_WEIGHT
+pachl_d$CATCH_COUNT<-pachl_d$OBFL_EST_COUNT
+pactrawl_d$CATCH_WEIGHT <- pactrawl_d$LANDED+pactrawl_d$DISCARDED
+pactrawl_d$CATCH_COUNT<-NA
+pacsable_d$CATCH_WEIGHT <- pacsable_d$LANDED+pacsable_d$DISCARDED
+pacsable_d$CATCH_COUNT<-NA
+fos_d$TOTAL_RELEASED_COUNT[is.na(fos_d$TOTAL_RELEASED_COUNT)]<-0
+fos_d$LANDED_COUNT[is.na(fos_d$LANDED_COUNT)]<-0
+fos_d$TOTAL_RELEASED_ROUND_KG[is.na(fos_d$TOTAL_RELEASED_ROUND_KG)]<-0
+fos_d$BEST_RETAINED_ROUND_KG[is.na(fos_d$BEST_RETAINED_ROUND_KG)]<-0
+fos_d$CATCH_WEIGHT<-fos_d$BEST_RETAINED_ROUND_KG+fos_d$TOTAL_RELEASED_ROUND_KG
+fos_d$CATCH_COUNT<-fos_d$TOTAL_RELEASED_COUNT+fos_d$LANDED_COUNT
+
+# Combine
+fnames <-  c( "Type", "Source", "SURVEY", "TRIP_ID", "EVENT_ID", "GEAR",
+              "YEAR","MONTH","MAJOR_STAT_AREA_CODE", "START_LATITUDE","START_LONGITUDE",
+              "END_LATITUDE","END_LONGITUDE", "DEPTH",
+              "SPECIES_CODE", "SPECIES_SCIENCE_NAME", "SPECIES_COMMON_NAME","CATCH_WEIGHT","CATCH_COUNT" )                   
+allgfdat <- rbind(gf_d[fnames],pachl_d[fnames],pactrawl_d[fnames],pacsable_d[fnames],fos_d[fnames])
+
+# Summary
+dim(allgfdat)
+summary(allgfdat)
+
+# Convert longitude all to negatives
+allgfdat$START_LONGITUDE <- -1 * abs( allgfdat$START_LONGITUDE ) 
+allgfdat$END_LONGITUDE <- -1 * abs( allgfdat$END_LONGITUDE ) 
+
+
+#---------------------------------------------------------------------#
+# merge with groups
+gfdat <- merge(allgfdat, csdat[,-2], by="SPECIES_CODE" )
+
+
+# format
+names(gfdat) <- cap_words( names(gfdat) )
+names(gfdat) <- gsub("_Id", "_ID", names(gfdat) )
+gfdat$Species_Science_Name <- cap_words( gfdat$Species_Science_Name )
+gfdat$Species_Common_Name <- cap_words( gfdat$Species_Common_Name )
+gfdat$Species_Common_Name[gfdat$Species_Common_Name == "NANA"] <- ""
+gfdat$Gear <- cap_words( gfdat$Gear )
+gfdat$Survey <- cap_words( gfdat$Survey )
+
+#Convert/remove gear types
+#gfdat$Gear[gfdat$Gear == "Midwater trawl"] <- "Trawl"
+# Only handful of records with reel or handline gear, lump with longline
+#gfdat$Gear[gfdat$Gear == "Rod and reel"] <- "Longline"
+#gfdat$Gear[gfdat$Gear == "Handline"] <- "Longline"
+gfdat<-subset(gfdat,gfdat$Gear!="Handline"&gfdat$Gear!="Rod and reel")
+ 
+
+# Summary
+summary(gfdat)
+str(gfdat)
+
+
+```
+
+
+```{r datasummary}
+
+p1<-ggplot(AlaskaData,aes(Weight))+stat_ecdf()
+p1+facet_wrap(~Gear)
+
+```
+
+
+
+# Results
+
+
+# Discussion
+
+# Acknowledgements
+
+# References
+
+# Tables
+
+# Figures
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
