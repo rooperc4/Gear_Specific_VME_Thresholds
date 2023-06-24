@@ -1,6 +1,6 @@
 ---
 title: "NPFC Gear and Taxa Specific Thresholds for VME Bycatch"
-author: "Chris Rooper, Glen Campbell, Vanessa Tuttle"
+author: "Chris Rooper, Glen Campbell, Vanessa Tuttle, Kayleigh Somers"
 date: "`r Sys.Date()`"
 output: pdf_document
 ---
@@ -48,12 +48,6 @@ AlaskaData<-data.frame(Year=AlaskaData$YEAR,Haul=AlaskaData$HAUL_NUMBER,Gear=Ala
 
 
 #DFO Data - Extracted directly from GFBio
-# Bug in DBI sometimes throws 'invalid description error'
-# If it occurs, look at the order of colums in type and sort the query
-# index <- dbColumnInfo( dbSendQuery(db_connection(), sql ))
-# index$type <- as.integer(index$type)     
-# c(which(index$type>=0),which(index$type<0))
-
 #---------------------------------------------------------------------#
 # List of coral and sponge hart codes
 # load csv
@@ -287,6 +281,10 @@ gfdat<-subset(gfdat,gfdat$Gear!="Handline"&gfdat$Gear!="Rod and reel")
 # Summary
 summary(gfdat)
 str(gfdat)
+table(gfdat$Gear,gfdat$Type)
+
+CanData<-subset(gfdat,gfdat$Type=="Fishery")
+CanData<-data.frame(Year=CanData$Year,Haul=CanData$Event_ID,Gear=CanData$Gear,Region="BC",Species=CanData$Species_Common_Name,Weight=CanData$Catch_Weight)
 
 
 ```
@@ -294,9 +292,15 @@ str(gfdat)
 
 ```{r datasummary}
 
-p1<-ggplot(AlaskaData,aes(Weight))+stat_ecdf()
-p1+facet_wrap(~Gear)
+p1<-ggplot(AlaskaData)+stat_ecdf(aes(Weight,color=Gear,group=Gear),geom='step')
+p1+facet_wrap(~Year,scales="free_x")
 
+p2<-ggplot(CanData)+stat_ecdf(aes(Weight,color=Gear,group=Gear),geom='step')
+p2+facet_wrap(~Year,scales="free_x")
+
+quantile(AlaskaData$Weight[AlaskaData$Species=="GORGONIAN"])
+p1<-ggplot(AlaskaData[AlaskaData$Species=="GORGONIAN",])+geom_histogram(aes(Weight))
+p1+facet_wrap(~Gear,scales="free")
 ```
 
 
