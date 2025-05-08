@@ -1,14 +1,30 @@
 ---
-title: "NPFC Gear and Taxa Specific Thresholds for VME Bycatch"
-author: "Chris Rooper, Glen Campbell, Vanessa Tuttle, Kayleigh Somers"
+title: Estimating quantitative gear and taxa specific thresholds for bycatch of vulnerable
+  marine ecosystem indicator taxa
+author: "Chris Rooper, Pamela Goddard, Vanessa Tuttle, Glenn Campbell, Kayleigh Somers"
 date: "`r Sys.Date()`"
-output: pdf_document
+output:
+  pdf_document:
+    extra_dependencies: flafter
+header-includes:
+- \usepackage{setspace}\doublespacing
+- \usepackage{lineno}
+- \linenumbers
+- \usepackage{indentfirst}
+- "\\usepackage{eso-pic,graphicx,transparent}"
+- \usepackage{lscape}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+- \usepackage{float}
+indent: yes
 ---
 
 ```{r setup, include=FALSE}
 library(ggplot2)
 library(gridExtra)
 library(gfdata)
+library(tidyr)
+library(kableExtra)
 # load packages
 library(DBI)
 library(dplyr)
@@ -19,19 +35,78 @@ library(rgdal)
 library(sp)
 library(plyr)
 library(sf)
+library(terra)
+library(raster)
+library(sp)
+library(rgeos)
+library(rgdal)
+library(rasterVis)
+library(ggspatial)
+library(ggOceanMaps)
+library(classInt)
+library(segmented)
+library(Hmisc)
+library(scico)
 # Load util.R gfdata functions
 source("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/r-sql-link-functions.R")
 source("C:/Users/rooperc/Documents/Chris Work Stuff/R Software Help and Functions/Miscellaneous Functions/dist_xy.R")
 
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,fig.pos = 'H')
+options(knitr.kable.NA = '')
 ```
 
-# Abstract
+\AddToShipoutPictureFG{
+  \AtPageCenter{% or \AtTextCenter
+    \makebox[0pt]{\rotatebox[origin=c]{45}{%
+      \scalebox{12}{\texttransparent{0.15}{DRAFT}}%
+    }}
+  }
+}
+
+
+**Abstract:** Corals and sponges are often a component of vulnerable marine ecosystems (VMEs) in the deep sea. These taxa can be impacted and removed by bottom contacting fishing gear and protecting VMEs is an important component of managing ecosystems. One of the tools that is routinely used to manage VME impacts from fishing gear is move-on rules triggered by bycatch thresholds (encounter thresholds) of VME. Usually, these bycatch thresholds are set with little information regarding the level of impact on the benthic habitat. The objective of this analysis was to develop and apply methods for quantifying threshold catches of VME indicator taxa by gear type and VME taxa grouping.Three previously used methods based on cumulative catch distributions and one novel method based on percentile regression of fishery bycatch and density from underwater camera surveys were applied to data from the northeast Pacific Ocean to determine data-based encounter thresholds that could trigger spatial fishery closures. The percentile regression method suggested encounter thresholds of ~40 - 65 kg of Antipatharia, < 20 kg of gorgonians and 78 - 131 kg of Porifera would equate to a density of 0.2 VME taxa per $m^2$ for bottom trawl bycatch. Threshold values were lower for longline and pot gear (generally < 10 kg per set). Using the percentile regression method allowed for the definition of VME encounter thresholds to be expressed in terms of density of the taxa of interest, an improvement over examination of break points in the cumulative catch data alone. This improvement allows the ecological importance (e.g. density of VME) to be defined and used to estimate encounter thresholds, rather than assuming that the natural break points in cumulative catch represent an ecological break point. \newline \newline
+
+**Keywords:** vulnerable marine ecosystems, move-on rules, bycatch thresholds, deep-sea coral and sponge, fisheries bycatch
+
+\newpage
 
 # Introduction
 
+Deep-sea corals and sponges have been identified by as ecosystem components that need protection from fishing activity and in 2006, language was adopted by the UN General Assembly to prevent impacts on vulnerable ecosystems by deep-sea fisheries as resolution 61/105 (FAO 2009). Vulnerable marine ecosystems (VMEs) have further been defined as areas where fishing activities are likely to have deleterious impacts on the benthic community (FAO 2009). Deep-sea corals and sponges are widely recognized as important components of VMEs and these taxa can increase seafloor biodiversity and contribute to fisheries production by providing complex structure on the seafloor (Buhl-Mortensen et al. 2010, Watling et al. 2011, Linley et al. 2017). In general, deep-sea corals and sponges are long-lived, mature after an extended period (years to decades), have low capacity for recruitment and recovery and are structurally fragile making them vulnerable to damage from mobile or fixed fishing gears (Koslow et al. 2001, Freese 2001, Clark and Rowden 2009, Heifetz et al. 2009). Managing the impacts of fishing activity on VMEs is difficult due to the paucity of data on the deep-sea, but requires spatial management in the context of understanding both the distribution and role of fishing and VME biology.
+
+Encounter protocols and spatial closures have been a tool that is often used in managing fisheries and VME impacts (Hourigan 2009, Auster et al. 2011, Ardron et al. 2014, Wallace et al. 2015). Typical implementation of an encounter protocol to protect VME involves defining a threshold catch weight that indicates the potential presence of a VME. Bycatch at or above this threshold weight then triggers a move-on rule where the fishing activity is forced to move away from the high bycatch area. In some cases either a permanent or temporary spatial closure is adopted around the bycatch event. The move-on rule and spatial closure can apply to only the vessel or gear type that triggered the encounter (Wallace et al. 2015, SPRFMO 2023) or it can apply to all fisheries operating in the area with bottom contacting gear (NPFC 2023). Indicator taxa are typically used to indicate the presence of a VME. So for example, in international waters of the Northeast Pacific Ocean, bycatch of > 50 kg of corals (any combination of Alcyonacea, gorgonian, Antipatharian or Scleractinian corals) or 500 kg of sponges (any combination of Hexactinellid sponges or Demospongiaes) by a fishing event (e.g. a bottom trawl haul) triggers a temporary spatial closure within 1 nm of the trawl path and forces the vessel (and other vessels fishing the same gear type) to avoid the closed area (NPFC 2023).
+
+Patch size for VME can be determined from underwater imagery, and can guide the placement and size of spatial closures (Kenchington et al. 2009, Rowden et al. 2017, SPRFMO 2021, Piechaud and Howell 2022). However, catch thresholds have historically been put in place based on limited information (Ardron et al. 2014). Thresholds that have been picked using bycatch data may not have an ecological basis for the value (Kenchington et al. 2009, Geange et al. 2020). Only a handful of studies have examined the catchability of fishing gear (e.g. Freese 2001). Assessing catchability of VME indicator taxa in fishing gear would allow for more data-based methods for identifying when bycatch values indicate the presence of a VME. The objective of this analysis was to develop and apply methods for quantifying threshold catches of VME indicator taxa by gear type and VME taxa grouping. Three previously developed methods are applied to fishery bycatch data only and a new method that relates fishery bycatch data to density data from stereo-camera surveys is applied. Threshold catches are then proposed based on fishery observer data and observed density data that can be implemented to trigger move-on rules and spatial closures for bottom contacting fishing gears.
+
 # Methods
 
+A wide variety of benthic invertebrates have historically been defined as vulnerable marine ecosystem indicator taxa and these definitions can vary substantially by management body (Baco-Taylor et al. 2023). In this analysis VME indicator taxa groupings as defined by the Regional Fisheries Management Organization (RFMO) for international waters the North Pacific, the North Pacific Fisheries Commission (NPFC; NPFC 2023) were used with two additions. The VME indicator taxa groupings used here are Alcyonacea (soft corals, excepting those species defined as Gorgonacea), gorgonian corals (upright, complex and branching corals from the families Primnoidae, Plexauridae, Paramuriceidae, Keratoisididae, Corallidae, Paragogiidae, Acanthogorgiidae, and Anthothelidae), Antipatharian corals (black corals), Scleractinian corals (stony corals), Hexactinellida (glass) sponges and Demospongiae in the phylum Porifera The two additional groups that were included in the analyses were Pennatulaceans and Hydrocorals. These two taxonomic groups have been considered in the past for inclusion in the NPFC indicator taxa list and are included as VME indicator taxa by some other regional fisheries management organizations. Because of varying data collection protocols for at-sea observer programs, Hexactinellid sponges and Demospongiaes were at times combined as Porifera and the gorgonian, stony coral, black coral, and soft coral groups were combined into a single coral group
+
+## Fisheries data
+
+Information collected by fisheries monitoring programs in Alaska, British Columbia and the United States of America (US) west coast were the primary data used in this analyses. For each program the bycatch of deep-sea coral and sponge taxa are recorded from subsamples of the total catch collected from individual hauls as the weight of each taxa. These weights are then expanded to the total haul catch using the total weight of the catch. All of these data are subject to privacy restrictions in Canada and the US, so the data from individual hauls were provided for analyses without identifying characteristics (e.g. latitude, longitude, depth, vessel name, etc.). The data was identified by year of catch and one of 5 regions of catch; eastern Bering Sea, Aleutian Islands, Gulf of Alaska, British Columbia and the US west coast (Figure 1). The data was also identified as coming from one of three fishing gear types; bottom trawling, hook and line (longline), or trap gear (pot). Further details on observer protocols and data collection can be found in NWFSC 2023, AFSC 2023, AMR 2005.
+
+The individual observations used in the analysis of fishery data were the catch in kg of benthic taxa for each haul. Zero catches were not used in this analysis since they would not be relevant to setting a taxa specific threshold. Observers typically identified benthic invertebrate taxa to the lowest possible resolution. In some cases this was species, but more often it was a higher taxonomic level (e.g. class or higher for sponges). The taxonomic groups used for reporting also varied somewhat among regions, for example in Alaska sponges were lumped into a single taxonomic grouping, while in British Columbia sponges were split into Demospongia, Hexactinellida and Calcarea (Table 1). The majority of the occurrence records were from bottom trawls (particularly in the Aleutian Islands), while longline gear and pot gear had fewer observations of benthic invertebrate catch (Table 1).
+
+## Camera survey data
+
+The other source of data used in these analyses were obtained from underwater camera surveys conducted in Alaska from 2011-2019 (Table 2). These data were collected using a stereo-camera system in the Aleutian Islands (Rooper et al. 2018), eastern Bering Sea outer shelf and slope (Rooper et al. 2016) and Gulf of Alaska (Sigler et al. 2022) as a part of a series of species distribution model validation studies and were only available for these three regions. The stereo-camera surveys followed roughly the same sampling protocol in each of the regions, with stations chosen using a stratified random sampling design (Aleutian Islands and eastern Bering Sea) or a haphazardly stratified sampling design (Gulf of Alaska). Transects targeting 15 minutes of on-bottom time were visually surveyed at each selected location. Fish, benthic invertebrates (primarily corals and sponges) were enumerated to their lowest possible taxonomic level (sub-family in most cases) and all or a subsample were measured for total height using stereo-image analysis (Williams et al. 2010). The area observed by the camera was calculated using the distance traveled during the transect and assuming 100% detection at a swath width equivalent to the viewing width at the median target distance for each transect (Rooper et al. 2016). Density was then calculated as the number of each taxa observed on a transect divided by the area observed on that transect in $no./m^2$. Densities of individual taxa were summed by transect into the VME indicator taxa groups used in the analysis (Table 1). For this analysis only transects with density greater than zero were utilized.
+
+## Data analysis - Fishery catch frequency
+
+Bycatch data from all five regions were examined across the various VME indicator taxa to determine the general trends and data characteristics. Mean, median, histograms and cumulative frequency of bycatch were summarized and compared among regions (see Supplemental Material). Naturally occurring breakpoints (Jenks breaks) and quantiles were also computed and compared for each of the regions. 
+
+Geange et al. (2020) used three methods to estimate potential encounter thresholds using only the shape of the cumulative bycatch curve We applied these cumulative catch curve threshold methods to data from the Northeast Pacific and compared among regions and across taxa where the number of bycatch records within the grouping was $\ge$ 300. The first of the three methods used by Geange et al. (2020) fits a 3-parameter segmented regression to the cumulative frequency distribution of the catch and was applied here to each gear type, region and VME taxa indicator individually. The final breakpoint of the segmented regression is used to calculate the cumulative catch threshold. Fitting of segmented regressions for the VME indicator data from fishery bycatch was completed using the segmented package in R (Vito and Muggeo 2008, R Core Team 2022). In the second method, the point on the cumulative frequency distribution that is closest to the top-left corner (point closest to x = 0 and y = 1) was calculated as $$ q_1 = \min_{i=1}^{n}\sqrt{(1-y_i)^2+(0-x_i)^2}$$, referred to hearafter as the minimum distance method (Tilbury et al. 2000). The final method applied to the fishery bycatch data was to calculate the Youden Index (Youden 1950, Ruopp et al. 2008), which is the point on the cumulative distribution that is the maximum of the linear distance between the extreme points on the curve. The Youden Index is calculated as $$ q_2 = \max_{i=1}^{n}(y_i+x_i-1) $$. Variance estimates for the cumulative catch threshold generated using the segmented regression were taken directly from the model fit, whereas for the $q_1$ and $q_2$ variance was estimated by the bootstrap method where the bycatch data was resampled 1000 times with replacement and the variance calculated from the 1000 replicated estimates (Efron and Tibshirani 1993). 
+
+## Data analysis - Fishery-camera ratio estimation
+
+An alternative and potentially improved method to estimate a taxa and gear specific threshold is to compare the distribution of densities of VME indicator species from the camera surveys to the bycatch of the same VME indicator taxa groups. The goal of this comparison was to estimate an equivalent density of VME indicator species to a weight of bycatch of that taxonomic grouping. To accomplish this comparison, percentiles of the observed density of VME indicator taxa in stereo-camera surveys were used to predict the percentiles of fisheries bycatch data within each region and within each gear type in Alaska. The stereo-camera data and the bycatch data were not collected at the same location or through the same process, so a number of assumptions were required: 1) we assumed the true distribution of the density of VME indicator taxa was known for each region from the stereo-camera survey, 2) we assumed that the bycatch of VME indicator taxa by each gear type for each fishing event was proportional to the density of VME indicator taxa at that site, 3) we assumed that the fishery events sampled from the full distribution of potential densities of VME indicator taxa in a region, and 4) from this we assumed that the distribution of bycatch of VME indicator taxa by a gear type in a region was proportional to the distribution of density of VME indicator taxa in the region.
+
+A linear model was fit to the percentiles of bycatch weights (dependent variable) and the percentiles of stereo-camera survey densities (independent covariate). Both the fisheries bycatch wieghts and the stereo-camera survey densities were log-transformed prior to analyses to meet assumptions of normality. The log-transformed density and the log-transformed weight of bycatch of VME indicator taxa were ordered and the density and weight at each $5^{th}$ percentile calculated (exploratory analyses were conducted using the $10^{th}$ and $1^{st}$ percentiles, but the effect on the results was negligible). The percentiles for the log-transformed weight of bycatch ($w_{t,r,g}$) were the density dependent variable in an analysis of covariance so that;
+$$w_{t,r,g} = \beta*d_{t,r} + g + r + t + d_{t,r}*g+d_{t,r}*r+d_{t,r}*t + g*r + \epsilon$$
+where $g$ is gear type (bottom trawl, longline or pot), $r$ is region (eastern Bering Sea, Aleutian Islands or Gulf of Alaska), $t$ is the VME indicator taxa found in Alaska (Alcyonacea, Antipatharia, gorgonian, Hydrocoral, Pennatulacean, or Porifera), $\epsilon$ are normally distributed errors. The second order interactions between gear and taxa and region and taxa could not be included, since some taxa did not occur in all regions or gear types. The model was simplified by removing insignificant variables in a backwards stepwise fashion until all remaining variables in the model were significant (p < 0.05).
+
+Once the best-fitting model was determined, the equation was used to generate predictions of a potential encounter threshold based on the percentile regressions. Currently there is no universally accepted definition of a vulnerable marine ecosystem based on the density of deep-sea corals or sponges. For demonstration purposes in this analysis, we defined a VME as a density of 1 individual coral colony or sponge per 5 $m^2$. Using this definition and the best fitting model,  thresholds were generated using a $d_{t,r} = log(0.2)$ for each specific gear, taxon and region combination. Confidence intervals were also estimated for the prediction. It is important to note that the choice of example density was somewhat arbitrary, reflecting a sensible estimate of what a relatively high density VME area might be. This example value could be easily updated if a commonly held density-based definition of a VME was determined. Percentile regression-based threshold bycatch weights were then compared among regions, gears and VME indicator groupings.
 
 ```{r importdata,echo=FALSE,results='hide',message=FALSE,warning=FALSE,cache=TRUE}
 
@@ -40,7 +115,8 @@ AlaskaData<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Spec
 AlaskaData<-data.frame(Year=AlaskaData$YEAR,Haul=AlaskaData$HAUL_NUMBER,Gear=AlaskaData$GEAR_TYPE,Region=AlaskaData$AREA,Species=AlaskaData$SPECIES_NAME,Weight=AlaskaData$SPECIES_EXTRAPOLATED_HAUL_WEIGHT_KG)
 
 #West Coast data - From Vanessa Tuttle and Kayleigh Somers, NWFSC FRAM
-
+WCData<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/wc_haul_data.csv",header=TRUE)
+WCData<-data.frame(Year=WCData$YEAR,Haul=WCData$HAUL_ID,Gear=WCData$gear,Region="West Coast",Species=WCData$species,Weight=WCData$weight_kg*1000000)
 
 
 
@@ -51,276 +127,1658 @@ AlaskaData<-data.frame(Year=AlaskaData$YEAR,Haul=AlaskaData$HAUL_NUMBER,Gear=Ala
 #---------------------------------------------------------------------#
 # List of coral and sponge hart codes
 # load csv
-#hartcodes <- read.csv("Species/SpeciesCodes_fromGFBio.csv", stringsAsFactors = F)
-csdat <- read.csv("C:/github/corals-sponges-dataset/AllCoralSponge_HartCodes_Groups_Master.csv", stringsAsFactors = F)
-cwcs <- as.character( csdat$SPECIES_CODE )
+# #hartcodes <- read.csv("Species/SpeciesCodes_fromGFBio.csv", stringsAsFactors = F)
+# csdat <- read.csv("C:/github/corals-sponges-dataset/AllCoralSponge_HartCodes_Groups_Master.csv", stringsAsFactors = F)
+# cwcs <- as.character( csdat$SPECIES_CODE )
+# 
+# #test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM GFBioSQL.dbo.CATCH")
+# 
+# #---------------------------------------------------------------------#
+# # Get gfbio survey data with coral and sponge observations
+# gf_sql <- readLines("./sql/get-gfbio-records.sql")
+# # Add to cwcs species to WHERE clause
+# gf_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, gf_sql)
+# gf_sql <- paste(gf_sql, collapse = "\n")
+# # Run query
+# gf_d <- DBI::dbGetQuery( db_connection(), gf_sql )
+# 
+# # Remove duplicate records
+# gf_d <- gf_d[!duplicated(gf_d),]
+# 
+# # Summaries
+# dim(gf_d)
+# head(gf_d)
+# table(gf_d$SURVEY)
+# table(gf_d$SPECIES_SCIENCE_NAME)
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get PacHarvHL data with coral and sponge by-catch records
+# #test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvHL.dbo.B4_Catches")
+# 
+# pachl_sql <- readLines("./sql/get-pacharvhl-records.sql")
+# # Add to cwcs species to WHERE clause
+# pachl_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pachl_sql)
+# pachl_sql <- paste(pachl_sql, collapse = "\n")
+# # Run query
+# pachl_d <- DBI::dbGetQuery( db_connection(), pachl_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(pachl_d$TRIP_ID, pachl_d$SET_ID, pachl_d$SPECIES_CODE, sep="-")
+# if ( any(duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( pachl_d[inds,] )
+#   # Remove duplicate records
+#   pachl_d <- pachl_d[!duplicated(pachl_d),]
+# }
+# 
+# # Summaries
+# dim(pachl_d)
+# head(pachl_d)
+# table(pachl_d$FISHERY_SECTOR)
+# table(pachl_d$SPECIES_SCIENCE_NAME)
+# 
+# 
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get PacHarvest (trawl) data with coral and sponge by-catch records
+# #test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvest.dbo.D_Official_Catch")
+# pactrawl_sql <- readLines("./sql/get-pacharvtrawl-records.sql")
+# # Add to cwcs species to WHERE clause
+# pactrawl_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pactrawl_sql)
+# pactrawl_sql <- paste(pactrawl_sql, collapse = "\n")
+# # Run query
+# pactrawl_d <- DBI::dbGetQuery( db_connection(), pactrawl_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(pactrawl_d$TRIP_ID, pactrawl_d$SET_ID, pactrawl_d$SPECIES_CODE, sep="-")
+# if ( any (duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( pactrawl_d[inds,] )
+#   # Remove duplicate records
+#   pactrawl_d <- pactrawl_d[!duplicated(pactrawl_d),]
+# }
+# 
+# # Summaries
+# dim(pactrawl_d)
+# head(pactrawl_d)
+# table(pactrawl_d$FISHERY_SECTOR)
+# table(pactrawl_d$SPECIES_SCIENCE_NAME)
+# 
+# 
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get PacHarvSable data with coral and sponge by-catch records
+# #test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvSable.dbo.D_Official_Catch")
+# pacsable_sql <- readLines("./sql/get-pacharvsable-records.sql")
+# # Add to cwcs species to WHERE clause
+# pacsable_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pacsable_sql)
+# pacsable_sql <- paste(pacsable_sql, collapse = "\n")
+# # Run query
+# pacsable_d <- DBI::dbGetQuery( db_connection(), pacsable_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(pacsable_d$TRIP_ID, pacsable_d$SET_ID, pacsable_d$SPECIES_CODE, sep="-")
+# if ( any (duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( pacsable_d[inds,] )
+#   # Remove duplicate records
+#   pacsable_d <- pacsable_d[!duplicated(pacsable_d),]
+# }
+# 
+# # Summaries
+# dim(pacsable_d)
+# head(pacsable_d)
+# table(pacsable_d$FISHERY_SECTOR)
+# table(pacsable_d$SPECIES_SCIENCE_NAME)
+# 
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get FOS data with coral and sponge by-catch records
+# #test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM GFFOS.dbo.GF_D_OFFICIAL_FE_CATCH")
+# fos_sql <- readLines("./sql/get-fos-records.sql")
+# # Add to cwcs species to WHERE clause
+# fos_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, fos_sql)
+# fos_sql <- paste(fos_sql, collapse = "\n")
+# # Run query
+# fos_d <- DBI::dbGetQuery( db_connection(), fos_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(fos_d$TRIP_ID, fos_d$EVENT_ID, fos_d$SPECIES_CODE, sep="-")
+# if ( any (duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( fos_d[inds,] )
+#   # Remove duplicate records
+#   fos_d <- fos_d[!duplicated(fos_d),]
+# }
+# 
+# # Remove Event_ID 551255, duplicate with IPHC survey event
+# fos_d <- fos_d[fos_d$EVENT_ID != 551255,]
+# 
+# # Summaries
+# dim(fos_d)
+# head(fos_d)
+# table(fos_d$FISHERY_SECTOR)
+# table(fos_d$SPECIES_SCIENCE_NAME)
+# 
+# 
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Combine
+# 
+# # Type
+# gf_d$Type <- "Research"
+# pachl_d$Type <- "Fishery"
+# pactrawl_d$Type <-  "Fishery"
+# pacsable_d$Type <- "Fishery"
+# fos_d$Type <- "Fishery"
+# 
+# # Source
+# gf_d$Source <- "GFBio"
+# pachl_d$Source <- "PacHL"
+# pactrawl_d$Source <-  "PacTrawl"
+# pacsable_d$Source <- "PacSable"
+# fos_d$Source <- "FOS"
+# 
+# # Survey or fishery section
+# pachl_d$SURVEY <- pachl_d$FISHERY_SECTOR
+# pactrawl_d$SURVEY <-  pactrawl_d$FISHERY_SECTOR
+# pacsable_d$SURVEY <- pacsable_d$FISHERY_SECTOR
+# fos_d$SURVEY <- fos_d$FISHERY_SECTOR
+# 
+# # Add fishing event or set field for those missing one
+# pachl_d$EVENT_ID <- paste(pachl_d$TRIP_ID, pachl_d$SET_ID, sep="_")
+# pactrawl_d$EVENT_ID <-  paste(pactrawl_d$TRIP_ID, pactrawl_d$SET_ID, sep="_")
+# 
+# #Add CATCH WEIGHT AND COUNT COLUMNS
+# pachl_d$CATCH_WEIGHT <- pachl_d$OBFL_EST_WEIGHT
+# pachl_d$CATCH_COUNT<-pachl_d$OBFL_EST_COUNT
+# pactrawl_d$CATCH_WEIGHT <- pactrawl_d$LANDED+pactrawl_d$DISCARDED
+# pactrawl_d$CATCH_COUNT<-NA
+# pacsable_d$CATCH_WEIGHT <- pacsable_d$LANDED+pacsable_d$DISCARDED
+# pacsable_d$CATCH_COUNT<-NA
+# fos_d$TOTAL_RELEASED_COUNT[is.na(fos_d$TOTAL_RELEASED_COUNT)]<-0
+# fos_d$LANDED_COUNT[is.na(fos_d$LANDED_COUNT)]<-0
+# fos_d$TOTAL_RELEASED_ROUND_KG[is.na(fos_d$TOTAL_RELEASED_ROUND_KG)]<-0
+# fos_d$BEST_RETAINED_ROUND_KG[is.na(fos_d$BEST_RETAINED_ROUND_KG)]<-0
+# fos_d$CATCH_WEIGHT<-fos_d$BEST_RETAINED_ROUND_KG+fos_d$TOTAL_RELEASED_ROUND_KG
+# fos_d$CATCH_COUNT<-fos_d$TOTAL_RELEASED_COUNT+fos_d$LANDED_COUNT
+# 
+# # Combine
+# fnames <-  c( "Type", "Source", "SURVEY", "TRIP_ID", "EVENT_ID", "GEAR",
+#               "YEAR","MONTH","MAJOR_STAT_AREA_CODE", "START_LATITUDE","START_LONGITUDE",
+#               "END_LATITUDE","END_LONGITUDE", "DEPTH",
+#               "SPECIES_CODE", "SPECIES_SCIENCE_NAME", "SPECIES_COMMON_NAME","CATCH_WEIGHT","CATCH_COUNT" )                   
+# allgfdat <- rbind(gf_d[fnames],pachl_d[fnames],pactrawl_d[fnames],pacsable_d[fnames],fos_d[fnames])
+# 
+# # Summary
+# dim(allgfdat)
+# summary(allgfdat)
+# 
+# # Convert longitude all to negatives
+# allgfdat$START_LONGITUDE <- -1 * abs( allgfdat$START_LONGITUDE ) 
+# allgfdat$END_LONGITUDE <- -1 * abs( allgfdat$END_LONGITUDE ) 
+# 
+# 
+# #---------------------------------------------------------------------#
+# # merge with groups
+# gfdat <- merge(allgfdat, csdat[,-2], by="SPECIES_CODE" )
+# 
+# 
+# # format
+# names(gfdat) <- cap_words( names(gfdat) )
+# names(gfdat) <- gsub("_Id", "_ID", names(gfdat) )
+# gfdat$Species_Science_Name <- cap_words( gfdat$Species_Science_Name )
+# gfdat$Species_Common_Name <- cap_words( gfdat$Species_Common_Name )
+# gfdat$Species_Common_Name[gfdat$Species_Common_Name == "NANA"] <- ""
+# gfdat$Gear <- cap_words( gfdat$Gear )
+# gfdat$Survey <- cap_words( gfdat$Survey )
+# 
+# #Convert/remove gear types
+# #gfdat$Gear[gfdat$Gear == "Midwater trawl"] <- "Trawl"
+# # Only handful of records with reel or handline gear, lump with longline
+# #gfdat$Gear[gfdat$Gear == "Rod and reel"] <- "Longline"
+# #gfdat$Gear[gfdat$Gear == "Handline"] <- "Longline"
+# gfdat<-subset(gfdat,gfdat$Gear!="Handline"&gfdat$Gear!="Rod and reel")
+#  
+# 
+# # Summary
+# summary(gfdat)
+# str(gfdat)
+# table(gfdat$Gear,gfdat$Type)
+# 
+#  CanData<-subset(gfdat,gfdat$Type=="Fishery")
+#  CanData<-data.frame(Year=CanData$Year,Haul=CanData$Event_ID,Gear=CanData$Gear,Region="BC",Species=CanData$Species_Science_Name,Weight=CanData$Catch_Weight)
+# 
+# write.csv(CanData,"can_haul_data.csv",row.names=FALSE)
+CanData<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/can_haul_data.csv",header=TRUE)
+CanData<-subset(CanData,CanData$Year>2001)
+alldata<-rbind(AlaskaData,WCData,CanData)
+SpeciesList<-read.csv("SpeciesList.csv",header=TRUE)
+alldata<-merge(alldata,SpeciesList,by="Species",all.x=TRUE)
+alldata$Gear[alldata$Gear=="Trawl"|alldata$Gear=="Bottom_Trawl"|alldata$Gear=="Bottom Trawl"]<-"Bottom trawl"
+alldata$Gear[alldata$Gear=="Pot"|alldata$Gear=="Trap"]<-"Pot"
+alldata$Gear[alldata$Gear=="Hook & Line"]<-"Longline"
+alldata<-subset(alldata,alldata$Year<2023)
+cdata<-aggregate(Weight~VME_group+Gear+Region+Haul+Year,data=alldata,FUN="sum")
 
-#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM GFBioSQL.dbo.CATCH")
+
+cdata$Region<-factor(cdata$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+cdata$VME_group[cdata$VME_group=="Glass sponge"]<-"Hexactinellida"
+cdata$VME_group[cdata$VME_group=="Demosponge"]<-"Demospongiae"
+
+VME_taxa<-c("Gorgonian","Alcyonacea","Antipatharia","Scleractinia","Demospongiae","Hexactinellida","Pennatulacean","Porifera")
+regions<-unique(cdata$Region)
+Gears<-unique(cdata$Gear)
+
+```
+
+
+
+```{r getabsforFO, echo=FALSE,eval=TRUE,message=FALSE}
 
 #---------------------------------------------------------------------#
+# Get all records from synoptic for absence records
+
 # Get gfbio survey data with coral and sponge observations
-gf_sql <- readLines("./sql/get-gfbio-records.sql")
-# Add to cwcs species to WHERE clause
-gf_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, gf_sql)
-gf_sql <- paste(gf_sql, collapse = "\n")
-# Run query
-gf_d <- DBI::dbGetQuery( db_connection(), gf_sql )
+# gfabs_sql <- readLines("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/sql/get-gfbio-records-forabsence.sql")
+# # Add to cwcs species to WHERE clause
+# gfabs_sql <- paste(gfabs_sql, collapse = "\n")
+# # Run query
+# gf_abs <- DBI::dbGetQuery( db_connection(), gfabs_sql )
+# 
+# # Remove duplicate records
+# gf_abs <- gf_abs %>% distinct()
+# 
+# # format
+# names(gf_abs) <- cap_words( names(gf_abs) )
+# names(gf_abs) <- gsub("_Id", "_ID", names(gf_abs) )
+# gf_abs$Gear <- cap_words( gf_abs$Gear )
+# gf_abs$Survey <- cap_words( gf_abs$Survey )
+# 
+# # Type
+# gf_abs$Type <- "Research"
+# 
+# # Source
+# gf_abs$Source <- "GFBio"
+# 
+# # Convert gear types
+# # Summaries
+# dim(gf_abs)
+# head(gf_abs)
+# table(gf_abs$Survey)
+# summary(gf_abs)
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get PacHarvest (trawl) data for absence
+# pactrawlabs_sql <- readLines("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/sql/get-pacharvtrawl-records-forabsence.sql")
+# # Add to cwcs species to WHERE clause
+# pactrawlabs_sql <- paste(pactrawlabs_sql, collapse = "\n")
+# # Run query
+# pactrawl_abs <- DBI::dbGetQuery( db_connection(), pactrawlabs_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(pactrawl_abs$TRIP_ID, pactrawl_abs$SET_ID, sep="-")
+# if ( any (duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( pactrawl_abs[inds,] )
+#   # Remove duplicate records
+#   pactrawl_abs <- pactrawl_abs[!duplicated(pactrawl_abs),]
+# }
+# 
+# # Summaries
+# dim(pactrawl_abs)
+# head(pactrawl_abs)
+# table(pactrawl_abs$FISHERY_SECTOR)
+# 
+# #---------------------------------------------------------------------#
+# # Get PacHarvHL data for absence records
+# pachlabs_sql <- readLines("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/sql/get-pacharvhl-records-forabsence.sql")
+# # Add to cwcs species to WHERE clause
+# pachlabs_sql <- paste(pachlabs_sql, collapse = "\n")
+# # Run query
+# pachl_abs <- DBI::dbGetQuery( db_connection(), pachlabs_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(pachl_abs$TRIP_ID, pachl_abs$SET_ID, sep="-")
+# if ( any(duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( pachl_abs[inds,] )
+#   # Remove duplicate records
+#   pachl_abs <- pachl_abs[!duplicated(pachl_abs),]
+# }
+# 
+# # Summaries
+# dim(pachl_abs)
+# head(pachl_abs)
+# table(pachl_abs$FISHERY_SECTOR)
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get PacHarvSable data for absence records
+# pacsableabs_sql <- readLines("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/sql/get-pacharvsable-records-forabsence.sql")
+# # Add to cwcs species to WHERE clause
+# pacsableabs_sql <- paste(pacsableabs_sql, collapse = "\n")
+# # Run query
+# pacsable_abs <- DBI::dbGetQuery( db_connection(), pacsableabs_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(pacsable_abs$TRIP_ID, pacsable_abs$SET_ID, sep="-")
+# if ( any (duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( pacsable_abs[inds,] )
+#   # Remove duplicate records
+#   pacsable_abs <- pacsable_abs[!duplicated(pacsable_abs),]
+# }
+# 
+# # Summaries
+# dim(pacsable_abs)
+# head(pacsable_abs)
+# table(pacsable_abs$FISHERY_SECTOR)
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Get FOS data with coral and sponge by-catch records
+# fosabs_sql <- readLines("C:/github/corals-sponges-dataset/DataSources/DFO_GrounfishShellfish/sql/get-fos-records-forabsence.sql")
+# # Add to cwcs species to WHERE clause
+# fosabs_sql <- paste(fosabs_sql, collapse = "\n")
+# # Run query
+# fos_abs <- DBI::dbGetQuery( db_connection(), fosabs_sql )
+# 
+# # Check for duplicates of species records from a single finishing event
+# dup_ind <- paste(fos_abs$TRIP_ID, fos_abs$EVENT_ID, sep="-")
+# if ( any (duplicated(dup_ind)) ){
+#   inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
+#             which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
+#   # show duplicated records
+#   print( fos_abs[inds,] )
+#   # Remove duplicate records
+#   fos_abs <- fos_abs[!duplicated(fos_abs),]
+# }
+# 
+# # Remove Event_ID 551255, duplicate with IPHC survey event
+# fos_abs <- fos_abs[fos_abs$EVENT_ID != 551255,]
+# 
+# # Summaries
+# dim(fos_abs)
+# head(fos_abs)
+# table(fos_abs$FISHERY_SECTOR)
+# 
+# 
+# #---------------------------------------------------------------------#
+# # Combine
+# 
+# # Type
+# gf_abs$Type <- "Research"
+# pachl_abs$Type <- "Fishery"
+# pactrawl_abs$Type <-  "Fishery"
+# pacsable_abs$Type <- "Fishery"
+# fos_abs$Type <- "Fishery"
+# 
+# # Source
+# gf_abs$Source <- "GFBio"
+# pachl_abs$Source <- "PacHL"
+# pactrawl_abs$Source <-  "PacTrawl"
+# pacsable_abs$Source <- "PacSable"
+# fos_abs$Source <- "FOS"
+# 
+# # Survey or fishery section
+# pachl_abs$SURVEY <- pachl_abs$FISHERY_SECTOR
+# pactrawl_abs$SURVEY <-  pactrawl_abs$FISHERY_SECTOR
+# pacsable_abs$SURVEY <- pacsable_abs$FISHERY_SECTOR
+# fos_abs$SURVEY <- fos_abs$FISHERY_SECTOR
+# 
+# # Add fishing event or set field for those missing one
+# pachl_abs$EVENT_ID <- paste(pachl_abs$TRIP_ID, pachl_abs$SET_ID, sep="_")
+# pactrawl_abs$EVENT_ID <-  paste(pactrawl_abs$TRIP_ID, pactrawl_abs$SET_ID, sep="_")
+# 
+# names(gf_abs) <-  c("SURVEY", "TRIP_ID", "EVENT_ID","SET_ID","YEAR","MONTH","DATE","MAJOR_STAT_AREA_CODE", "START_LATITUDE","START_LONGITUDE","END_LATITUDE","END_LONGITUDE", "DEPTH","GEAR","Type", "Source")
+# 
+# # Combine
+# fnames <-  c( "Type", "Source", "SURVEY", "TRIP_ID", "EVENT_ID", "GEAR",
+#               "YEAR","MONTH","MAJOR_STAT_AREA_CODE", "START_LATITUDE","START_LONGITUDE",
+#               "END_LATITUDE","END_LONGITUDE", "DEPTH")
+# 
+# allgfabs <- rbind(gf_abs[fnames],pachl_abs[fnames],pactrawl_abs[fnames],pacsable_abs[fnames],fos_abs[fnames])
+# 
+# # Summary
+# dim(allgfabs)
+# summary(allgfabs)
+# 
+# # Convert longitude all to negatives
+# allgfabs$START_LONGITUDE <- -1 * abs( allgfabs$START_LONGITUDE ) 
+# allgfabs$END_LONGITUDE <- -1 * abs( allgfabs$END_LONGITUDE ) 
+# 
+# 
+# #---------------------------------------------------------------------#
+# # merge with groups
+# gfabs <- allgfabs
+# 
+# 
+# # format
+# names(gfabs) <- cap_words( names(gfabs) )
+# names(gfabs) <- gsub("_Id", "_ID", names(gfabs) )
+# gfabs$Gear <- cap_words( gfabs$Gear )
+# gfabs$Survey <- cap_words( gfabs$Survey )
+# 
+# # Summary
+# summary(gfabs)
+# str(gfabs)
+# 
+# table(gfabs$Gear)
+# 
+# #Convert/remove gear types
+# 
+# CanObserved<-subset(gfabs,gfabs$Year>2001&gfabs$Year<2023)
+# CanObserved<-subset(CanObserved,CanObserved$Type!="Research")
+# CanObserved$Gear[CanObserved$Gear=="Trap"]<-"Pot"
+# 
+# table(CanObserved$Gear)
+# 
+# CanObserved<-subset(CanObserved,CanObserved$Gear=="Longline"|CanObserved$Gear=="Trawl"|CanObserved$Gear=="Pot")
+# 
+# CanObserved<-aggregate(Trip_ID~Year+Gear,data=CanObserved,FUN="length")
+# CanObserved$Region<-"BC"
+# 
+# 
+# write.csv(CanObserved,"C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/Can_observed.csv",row.names=FALSE)
 
-# Remove duplicate records
-gf_d <- gf_d[!duplicated(gf_d),]
+```
 
-# Summaries
-dim(gf_d)
-head(gf_d)
-table(gf_d$SURVEY)
-table(gf_d$SPECIES_SCIENCE_NAME)
+```{r cameradata,echo=FALSE,message=FALSE,results='hide',warning=FALSE}
+vdata<-read.csv("CameraData.csv",header=TRUE)
+vdata<-pivot_longer(vdata,cols=Acanthogorgia.sp:Porifera,names_to="Species",values_to="Density")
+vdata<-merge(vdata,SpeciesList,by="Species",all.x=TRUE)
+vdata<-subset(vdata,vdata$Density>0)
+vdata$Region[vdata$region=="AI"]<-"Aleutian Islands"
+vdata$Region[vdata$region=="GOA"]<-"Gulf of Alaska"
+vdata$Region[vdata$region=="EBS"]<-"Bering Sea"
+
+vdatapos<-unique(data.frame(lon=vdata$Start_long,lat=vdata$Start_lat,Region=vdata$Region,Deployment_ID=vdata$Deployment_ID))
+
+aggregate(Deployment_ID~Region,data=vdata,FUN="length")
+
+vdata<-aggregate(Density~VME_group+Region+Deployment_ID,data=vdata,FUN="sum")
+vdata$Density<-vdata$Density/10000
+
+vdata$VME_group[vdata$VME_group=="Glass sponge"]<-"Hexactinellida"
+vdata$VME_group[vdata$VME_group=="Demosponge"]<-"Demospongiae"
+
+png("Figures/summplemental_cdfs_camera.png",width=6,height=12,units="in",res=300)
+p3<-ggplot(vdata[vdata$VME_group %in% VME_taxa,])+stat_ecdf(aes(Density),geom='step') 
+p3+facet_wrap(~VME_group,scales="free_x",ncol=3,drop=FALSE)
+dev.off()
 
 
-#---------------------------------------------------------------------#
-# Get PacHarvHL data with coral and sponge by-catch records
-#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvHL.dbo.B4_Catches")
+t1<-unique(vdata[,2:3])
+aggregate(Deployment_ID~Region,data=t1,FUN="length")
 
-pachl_sql <- readLines("./sql/get-pacharvhl-records.sql")
-# Add to cwcs species to WHERE clause
-pachl_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pachl_sql)
-pachl_sql <- paste(pachl_sql, collapse = "\n")
-# Run query
-pachl_d <- DBI::dbGetQuery( db_connection(), pachl_sql )
+```
 
-# Check for duplicates of species records from a single finishing event
-dup_ind <- paste(pachl_d$TRIP_ID, pachl_d$SET_ID, pachl_d$SPECIES_CODE, sep="-")
-if ( any(duplicated(dup_ind)) ){
-  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
-            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
-  # show duplicated records
-  print( pachl_d[inds,] )
-  # Remove duplicate records
-  pachl_d <- pachl_d[!duplicated(pachl_d),]
+
+```{r MakeFigure 1,echo=FALSE,warning=FALSE,message=FALSE,results='hide'}
+AK <- basemap(limits = c(170, -115, 32.5, 65),
+        bathymetry = TRUE, legends=FALSE,lon.interval = 5, rotate = TRUE,grid.col=NA)+
+  geom_spatial_point(data=vdatapos,aes(x=lon,y=lat),color="darkred",shape=".")+
+xlab("Longitude")+ylab("Latitude")+
+  geom_spatial_text(aes(label="US West Coast", x = -127,y=40.5),angle=-55,size=3,color="#f0f921")+
+  geom_spatial_text(aes(label="British", x = -133,y=51.5),angle=-40,size=3,color="#f89540")+
+    geom_spatial_text(aes(label="Columbia", x = -135,y=51.5),angle=-40,size=3,color="#f89540")+
+  geom_spatial_text(aes(label="Gulf of Alaska", x = -150,y=55.6),angle=25,size=3,color="#cc4778")+
+  geom_spatial_text(aes(label="Aleutian Islands", x = -176,y=49.5),angle=-10,size=3,color="#7e03a8")+
+  geom_spatial_text(aes(label="Bering Sea", x = -170,y=58),angle=-68,size=3,color="#0d0887")+
+
+    annotation_north_arrow(location = "br", width = unit(.5, "cm"),
+                           height = unit(1., "cm"), which_north = "true",
+                           style = north_arrow_orienteering(
+                             line_width = 1,
+                             line_col = "black",
+                             fill = c("white", "black"),
+                             text_col = "black",
+                             text_family = "",
+                             text_face = NULL,
+                             text_size = 10,
+                             text_angle = 0)) + 
+      geom_spatial_segment(aes(x = -117, y = 32.5, xend = -123, yend = 32.5),size=1,color="#f0f921")+
+  geom_spatial_segment(aes(x = -123, y = 48, xend = -129, yend = 48),size=1,color="#f0f921")+
+    geom_spatial_segment(aes(x = -123, y = 48.2, xend = -129, yend = 48.2),size=1,color="#f89540")+
+    geom_spatial_segment(aes(x = -130, y = 54.4, xend = -136, yend = 54.4),size=1,color="#f89540")+
+      geom_spatial_segment(aes(x = -130, y = 54.6, xend = -136, yend = 54.6),size=1,color="#cc4778")+
+    geom_spatial_segment(aes(x = -165, y = 54.5, xend = -165, yend = 51.5),size=1,color="#cc4778")+
+    geom_spatial_segment(aes(x = -165, y = 54.8, xend = -170, yend = 53.3),size=1,color="#0d0887")+
+    geom_spatial_segment(aes(x = -176, y = 60.5, xend = 178, yend = 59.5),size=1,color="#0d0887")+
+        geom_spatial_segment(aes(x = -165.4, y = 54.5, xend = -165.4, yend = 51.5),size=1,color="#7e03a8")+
+                  geom_spatial_segment(aes(x = 170, y = 55.5, xend = 170, yend = 52.5),size=1,color="#7e03a8")
+#MAKE IT A FILE
+png("Figures/Figure1.png",width=7,height=5,unit="in",res=300)
+print(AK)
+dev.off()
+```
+
+```{r frequencyofoccurrence,echo=FALSE,warning=FALSE,message=FALSE,results='hide'}
+
+CanObserved<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/Can_observed.csv",header=TRUE)
+colnames(CanObserved)<-c("Year","Gear","Observed_hauls","Region")
+
+WCObserved<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/WC_observed.csv",header=TRUE)
+#WCObserved<-data.frame(pivot_longer(WCObserved,cols=Trawl:Pot,names_to="Gear",values_to="Observed_hauls"))
+#WCObserved$Region<-"West Coast"
+
+
+AKObserved<-read.csv("C:/Users/rooperc/Desktop/Deep Sea Coral Research/Gear Specific Thresholds/Data/AK_observed.csv",header=TRUE)
+
+
+Observed<-rbind(AKObserved,CanObserved,WCObserved)
+Observed$Region<-factor(Observed$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+Observed$Gear[Observed$Gear=="Bottom_Trawl"|Observed$Gear=="Trawl"]<-"Bottom trawl"
+Observed<-aggregate(Observed_hauls~Gear+Region,data=Observed,FUN="sum")
+
+d1<-aggregate(Weight~VME_group+Region+Gear,data=cdata,FUN="length")
+Observed<-merge(Observed,d1,by=c("Gear","Region"),all=TRUE)
+Observed$FO<-Observed$Weight/Observed$Observed_hauls
+
+
+png("Figures/Figure2old.png",width=8,height=6,units="in",res=300)
+p1<-ggplot(Observed)+geom_bar(aes(x=Region,y=FO,fill=VME_group,color=VME_group),stat="identity")+theme(axis.text.x= element_text(angle = 90))+xlab("")+labs(fill="VME taxa",color="VME taxa")+
+  ylab("Frequency of occurrence in trawl hauls or longline/pot sets")
+p1+facet_wrap(~Gear)
+dev.off()
+
+
+cdata2<-aggregate(Weight~VME_group+Region+Gear,data=cdata,FUN="sum")
+cdata2$type<-"Weight"
+#cdata2$Region<-factor(cdata2$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+cdata3<-Observed[,c(1:2,4,6)]
+cdata3$type<-"Frequency of occurrence"
+colnames(cdata3)[4]<-"value"
+colnames(cdata2)[4]<-"value"
+cdata2$value<-cdata2$value/1000000
+cdata2<-rbind(cdata2,cdata3)
+
+
+png("Figures/Figure2.png",width=8,height=6,units="in",res=300)
+p1<-ggplot(cdata2)+geom_bar(aes(x=Region,y=value,fill=VME_group,color=VME_group),stat="identity")+theme(axis.text.x= element_text(angle = 90))+xlab("")+labs(fill="VME taxa",color="VME taxa")+
+  ylab("")
+p1+facet_wrap(~type+Gear,ncol=3,scales="free_y")+theme(strip.text.x=element_blank())
+dev.off()
+
+addSmallLegend <- function(myPlot, pointSize = 0.5, textSize = 3, spaceLegend = 0.1) {
+    myPlot +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
 }
 
-# Summaries
-dim(pachl_d)
-head(pachl_d)
-table(pachl_d$FISHERY_SECTOR)
-table(pachl_d$SPECIES_SCIENCE_NAME)
+gears<-c("Bottom trawl","Longline","Pot")
+types<-c("Frequency of occurrence","Weight")
+mygrobs<-list()
+m<-1
+cdata2$VME_group<-factor(cdata2$VME_group,levels=c("Hydrocoral","Pennatulacean","Alcyonacea","Scleractinia","Antipatharia","Gorgonian","CoralsBryozoans","Calcarea","Hexactinellida sponge","Demospongiae","Porifera"),labels=c("Hydrocoral","Pennatulacean","Alcyonacea","Scleractinia","Antipatharia","Gorgonian","CoralsBryozoans","Calcarea","Hexactinellida","Demospongiae","Porifera"))
+
+
+
+for(i in 1:length(gears)){
+  for(j in 1:length(types)){
+      data1<-subset(cdata2,cdata2$Gear==gears[i]&cdata2$type==types[j])
+      
+      p1<-ggplot(data1)+geom_bar(aes(x=Region,y=value,fill=VME_group,color=VME_group),stat="identity",show.legend=TRUE)+
+        theme(axis.text.x= element_blank(),legend.position = "none",plot.margin=unit(c(0,0,0,0),"lines"))+xlab("")+
+        labs(fill="VME taxa",color="VME taxa")+ylab("")+ scale_y_continuous(expand = c(0, 0),labels = ~ format(.x, scientific = FALSE))+ 
+          scale_fill_scico_d(palette="roma",name="VME indicator taxa",begin=0,end=1,drop=FALSE)+
+          scale_colour_scico_d(palette="roma",name="VME indicator taxa",begin=0,end=1,drop=FALSE)
+        
+        #scale_fill_viridis(option="A",discrete=TRUE,drop=FALSE,begin=0,end=.8)+
+        #scale_colour_viridis(option="A",discrete=TRUE,drop=FALSE,begin=0,end=.8)
+      
+      
+      if(i==1&j==1){p1<-p1+ylab("Frequency of\noccurrence")+ggtitle("Bottom trawl")}
+      if(i==2&j==1){p1<-p1+ggtitle("Longline")}
+      if(i==3&j==1){p1<-p1+ggtitle("Pot")+theme(legend.position=c(.75,0.8),legend.title = element_text(size = 7), 
+              legend.text  = element_text(size = 7), legend.key=element_rect(fill="transparent",colour="transparent"),
+              legend.key.size = unit(.5, "lines"))+   guides(shape = guide_legend(override.aes = list(size = .5)),
+               color = guide_legend(override.aes = list(size = .5)))}
+      if(i==1&j==2){p1<-p1+ylab(bquote('Weight'~(kg~10^6)))}
+      if(j==2){p1<-p1+theme(axis.text.x= element_text(angle = 90))}
+mygrobs[[m]]<-ggplotGrob(p1)
+m<-m+1}}
+
+png("Figures/Figure2bs.png",width=8,height=6,units="in",res=300)
+grid.arrange(mygrobs[[1]],mygrobs[[3]],mygrobs[[5]],mygrobs[[2]],mygrobs[[4]],mygrobs[[6]],ncol=3)  
+dev.off()
+
+#Results paragraph
+d1<-aggregate(Observed_hauls~Region+Gear,data=Observed,FUN="mean")
+d2<-aggregate(Observed_hauls~Region,data=d1,FUN="sum")
+d1<-merge(d1,d2,by="Region")
+d1$proportion<-d1$Observed_hauls.x/d1$Observed_hauls.y
+
+Observed2<-cdata
+Observed2$sum_group<-"Coral"
+Observed2$sum_group[Observed2$VME_group=="Porifera"|Observed2$VME_group=="Calcarea"|Observed2$VME_group=="Hexactinellida"|Observed2$VME_group=="Demospongiae"]<-"Sponge"
+Observed2$sum_group[Observed2$VME_group=="Hydrocoral"]<-"Hydrocoral"
+Observed2$sum_group[Observed2$VME_group=="Pennatulacean"]<-"Pennatulacean"
+#Observed2$Region<-factor(Observed2$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+d2<-aggregate(Weight~sum_group+Region+Gear+Haul+Year,data=Observed2,FUN="sum")
+d2<-aggregate(Weight~sum_group+Region+Gear,data=d2,FUN="length")
+d3<-d1[,1:3]
+Observed2<-merge(d2,d3,by=c("Gear","Region"),all.x=TRUE)
+Observed2$FO<-100*(Observed2$Weight/Observed2$Observed_hauls.x)
+
+
+subset(Observed2,Observed2$Region=="Bering Sea")
+subset(Observed2,Observed2$Region=="Aleutian Islands")
+subset(Observed2,Observed2$Region=="Gulf of Alaska")
+subset(Observed2,Observed2$Region=="Canada")
+subset(Observed2,Observed2$Region=="West Coast")
+
+Observed3<-cdata
+Observed3$sum_group<-"Coral"
+Observed3$sum_group[Observed3$VME_group=="Porifera"|Observed3$VME_group=="Calcarea"|Observed3$VME_group=="Hexactinellida"|Observed3$VME_group=="Demospongiae"]<-"Sponge"
+Observed3$sum_group[Observed3$VME_group=="Hydrocoral"]<-"Hydrocoral"
+Observed3$sum_group[Observed3$VME_group=="Pennatulacean"]<-"Pennatulacean"
+#Observed3$Region<-factor(Observed3$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+d3<-aggregate(Weight~sum_group+Region+Gear,data=Observed3,FUN="sum")
+subset(d3,d3$Region=="Aleutian Islands")
+subset(d3,d3$Region=="Bering Sea")
+subset(d3,d3$Region=="Gulf of Alaska")
+subset(d3,d3$Region=="Canada")
+subset(d3,d3$Region=="West Coast")
+
+
+```
+```{r datasummarybyyear,echo=FALSE,message=FALSE,results='hide',warning=FALSE}
+
+d4<-aggregate(Weight~VME_group+Region+Year,data=cdata,FUN="sum",na.rm=TRUE)
+
+Observed3<-rbind(AKObserved,CanObserved,WCObserved)
+Observed3$Gear[Observed3$Gear=="Bottom_Trawl"|Observed3$Gear=="Trawl"]<-"Bottom trawl"
+Observed3$Region<-factor(Observed3$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+Observed3<-aggregate(Observed_hauls~Year+Region,data=Observed3,FUN="sum")
+
+Observed3<-merge(Observed3,d4,by=c("Region","Year"),all=TRUE)
+
+Observed3$CPUE<-Observed3$Weight/Observed3$Observed_hauls
+
+Observed3$VME_group<-factor(Observed3$VME_group,levels=c("Hydrocoral","Pennatulacean","Alcyonacea","Scleractinia","Antipatharia","Gorgonian","CoralsBryozoans","Calcarea","Hexactinellida","Demospongiae","Porifera"),labels=c("Hydrocoral","Pennatulacean","Alcyonacea","Scleractinia","Antipatharia","Gorgonian","CoralsBryozoans","Calcarea","Hexactinellida","Demospongiae","Porifera"))
+
+
+
+png("Figures/Figure3.png",width=7,height=7,units="in",res=300)
+p1<-ggplot(Observed3)+geom_bar(aes(x=Year,y=CPUE,fill=VME_group),stat="identity",position="stack")+theme(axis.text.x= element_text(angle = 90))+ylab("Weight (kg) per fishing event")+xlab("")+
+  scale_fill_scico_d(palette="roma",name="VME indicator taxa",begin=0,end=1,drop=FALSE)
+  #scale_fill_viridis(discrete=TRUE,name="VME taxa",begin=0,end=.9,drop=FALSE)
+p1+facet_wrap(~Region,scales="free_y",ncol=1,drop=FALSE)
+dev.off()
 
 
 
 
-#---------------------------------------------------------------------#
-# Get PacHarvest (trawl) data with coral and sponge by-catch records
-#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvest.dbo.D_Official_Catch")
-pactrawl_sql <- readLines("./sql/get-pacharvtrawl-records.sql")
-# Add to cwcs species to WHERE clause
-pactrawl_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pactrawl_sql)
-pactrawl_sql <- paste(pactrawl_sql, collapse = "\n")
-# Run query
-pactrawl_d <- DBI::dbGetQuery( db_connection(), pactrawl_sql )
 
-# Check for duplicates of species records from a single finishing event
-dup_ind <- paste(pactrawl_d$TRIP_ID, pactrawl_d$SET_ID, pactrawl_d$SPECIES_CODE, sep="-")
-if ( any (duplicated(dup_ind)) ){
-  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
-            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
-  # show duplicated records
-  print( pactrawl_d[inds,] )
-  # Remove duplicate records
-  pactrawl_d <- pactrawl_d[!duplicated(pactrawl_d),]
+```
+
+```{r datasummarybyregion,echo=FALSE,message=FALSE,results='hide',warning=FALSE}
+
+d1<-aggregate(Weight~VME_group+Region+Gear,data=cdata,FUN="length")
+d1$Region<-factor(d1$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+png("Figures/Figure2bis.png",width=8,height=6,units="in",res=300)
+p12<-ggplot(d1)+geom_bar(aes(x=Region,y=Weight,fill=VME_group,color=VME_group),stat="identity")+theme(axis.text.x= element_text(angle = 90))+
+  ylab("Number of tows with VME indicator taxa")
+p12+facet_wrap(~Gear)
+dev.off()
+
+d1<-cdata
+#d1$Region<-factor(d1$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+d1<-subset(d1,d1$Weight>0)
+d1$VME_group[d1$VME_group=="Demospongiae"|d1$VME_group=="Hexactinellida"|d1$VME_group=="Calcarea"]<-"Porifera"
+d1$VME_group[d1$VME_group=="CoralsBryozoans"]<-"Alcyonacea"
+
+aov1<-aov(log(Weight)~Gear+Region+VME_group,data=d1,na.omit=TRUE)
+summary(aov1)
+TukeyHSD(aov1)
+
+  png("Figures/Figure4.png",width=7,height=9,units="in",res=300)
+  p1<-ggplot(d1)+geom_boxplot(aes(x=Region,y=log(Weight)))+theme(axis.text.x= element_text(angle = 90))+xlab("")+ylab("log(Weight (kg))")
+  p1+facet_wrap(~VME_group+Gear,scales="free_y",drop=FALSE,ncol=3)
+  dev.off()
+
+t14<-aggregate(Weight~Gear+Region+VME_group,data=d1,FUN="mean")
+t14$SE<-aggregate(Weight~Gear+Region+VME_group,data=d1,FUN="sd")[,4]/sqrt(t14$SE<-aggregate(Weight~Gear+Region+VME_group,data=d1,FUN="length")[,4])
+
+
+
+```
+
+
+```{r jenksbreaks,echo=FALSE,message=FALSE,results='hide',warning=FALSE,cache=TRUE}
+
+#cdata$Region<-factor(cdata$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+regions<-c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast")
+
+jbreaks<-NULL
+mygrobs<-list()
+m<-1
+m2<-NULL
+for(i in 1:length(VME_taxa)){
+  for(j in 1:length(regions)){
+    for(k in 1:length(Gears)){
+      data1<-NULL
+      data1<-subset(cdata,cdata$VME_group==VME_taxa[i]&cdata$Region==regions[j]&cdata$Gear==Gears[k])
+      if(dim(data1)[1]<50){break}
+      d1<-data.frame(rbind(classIntervals(data1$Weight,style="fisher",n=5)$brks))
+      colnames(d1)<-c("j1","j2","j3","j4","j5","j6")
+      d1$VME_group<-VME_taxa[i]
+      d1$Region<-regions[j]
+      d1$Gear<-Gears[k]
+      d1$mean<-mean(data1$Weight)
+      d1$median<-median(data1$Weight)
+      d1$sd<-sd(data1$Weight)
+      d1$number<-length(data1$Weight)
+      d1$quant90<-quantile(data1$Weight,probs=0.9)
+      d1$quant75<-quantile(data1$Weight,probs=0.75)
+      jbreaks<-rbind(jbreaks,d1)
+      
+      
+     p1<-ggplot(data1)+geom_histogram(aes(Weight),breaks=seq(0,d1$j5,d1$j5/100))+
+       xlab("Weight (kg)")+ylab("Frequency")+geom_vline(xintercept=d1$quant90,color="darkred",linetype="dashed")+
+       geom_vline(xintercept = d1$median,color="blue",linetype="dashed")+geom_vline(xintercept=d1$mean,color="orange",linetype="dashed")+
+       annotate("text",label=paste0("n = ", d1$number,"\n max. bycatch = ",round(d1$j6,1),"\n mean = ",round(d1$mean,2),"\n SD = ",round(d1$sd,2)),x=Inf,y=Inf,hjust=1,vjust=1,size=2)+
+       ggtitle(paste(VME_taxa[i],", ",regions[j],",\n",Gears[k],sep=""))+theme(plot.title = element_text(size = 10, face = "bold"))
+
+mygrobs[[m]]<-ggplotGrob(p1)
+m2<-c(m2,regions[j])
+m<-m+1
+
+
+
+ if(VME_taxa[i]=="Gorgonian"&regions[j]=="Aleutian Islands"&Gears[k]=="Bottom trawl"){figure4a<-ggplotGrob(p1)}  
+  if(VME_taxa[i]=="Pennatulacean"&regions[j]=="Bering Sea"&Gears[k]=="Longline"){figure4b<-ggplotGrob(p1)} 
+ if(VME_taxa[i]=="Demospongiae"&regions[j]=="Canada"&Gears[k]=="Bottom trawl"){figure4c<-ggplotGrob(p1)} 
+  if(VME_taxa[i]=="Alcyonacea"&regions[j]=="West Coast"&Gears[k]=="Longline"){figure4d<-ggplotGrob(p1)} 
+      
+    }}
+  }
+
+png(paste0("./Figures/FigureS1a.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Aleutian Islands")
+      grid.arrange(grobs=mygrobsai)
+     dev.off()       
+     
+png(paste0("./Figures/FigureS1b.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Bering Sea")
+      grid.arrange(grobs=mygrobsai)
+     dev.off()   
+     
+     
+png(paste0("./Figures/FigureS1c.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Gulf of Alaska")
+      grid.arrange(grobs=mygrobsai)
+     dev.off()   
+     
+png(paste0("./Figures/FigureS1d.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Canada")
+      grid.arrange(grobs=mygrobsai)
+     dev.off()   
+     
+png(paste0("./Figures/FigureS1e.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="West Coast")
+      grid.arrange(grobs=mygrobsai,ncol=3)
+     dev.off()   
+
+
+png("./Figures/Figure5.png",width=7,height=7,units="in",res=300)
+grid.arrange(figure4a,figure4b,figure4c,figure4d)
+dev.off()
+
+
+
+```
+
+
+
+```{r segmentedindices,echo=FALSE,message=FALSE,results='hide',warning=FALSE,cache=TRUE}
+
+gy<-function(xo,boots=1000){
+x<-xo/max(xo)
+y<-trunc(rank(xo))/length(xo)
+gy<-y+(1-x)-1
+yi<-max(gy)
+x2<-xo[which.max(gy)]
+y2<-y[which.max(gy)]
+
+gysd<-NULL
+gxsd<-NULL
+for(i in 1:boots){
+ens<-sample(seq(1,length(x),1),size=length(x),replace=TRUE)
+xov<-xo[ens]
+xv<-xov/max(xov)
+yv<-trunc(rank(xov))/length(xov)
+gyv<-yv+(1-xv)-1
+yiv<-max(gyv)
+x2v<-xv[which.max(gyv)]*max(xov)
+y2v<-yv[which.max(gyv)]
+gysd[i]<-y2v
+gxsd[i]<-x2v
+}
+x2sd<-sd(gxsd)
+y2sd<-sd(gysd)
+
+return(cbind(x2,y2,x2sd,y2sd))
 }
 
-# Summaries
-dim(pactrawl_d)
-head(pactrawl_d)
-table(pactrawl_d$FISHERY_SECTOR)
-table(pactrawl_d$SPECIES_SCIENCE_NAME)
 
+gs<-function(xo,boots=1000){
+ x<-xo/max(xo)
+ y<-trunc(rank(xo))/length(xo)  
+  
+ gs<-sqrt((1-y)^2+(0-x)^2)
+ g1<-min(gs)
+ x1<-xo[which.min(gs)]
+ y1<-y[which.min(gs)]
 
+gysd<-NULL
+gxsd<-NULL
+for(i in 1:boots){
+ens<-sample(seq(1,length(x),1),size=length(x),replace=TRUE)
+xov<-xo[ens]
+xv<-xov/max(xov)
+yv<-trunc(rank(xov))/length(xov)
+gsv<-sqrt((1-yv)^2+(0-xv)^2)
+yiv<-min(gsv)
+x1v<-xv[which.min(gsv)]*max(xov)
+y1v<-yv[which.min(gsv)]
+gysd[i]<-y1v
+gxsd[i]<-x1v
+}
+x1sd<-sd(gxsd)
+y1sd<-sd(gysd)
 
-
-#---------------------------------------------------------------------#
-# Get PacHarvSable data with coral and sponge by-catch records
-#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM PacHarvSable.dbo.D_Official_Catch")
-pacsable_sql <- readLines("./sql/get-pacharvsable-records.sql")
-# Add to cwcs species to WHERE clause
-pacsable_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, pacsable_sql)
-pacsable_sql <- paste(pacsable_sql, collapse = "\n")
-# Run query
-pacsable_d <- DBI::dbGetQuery( db_connection(), pacsable_sql )
-
-# Check for duplicates of species records from a single finishing event
-dup_ind <- paste(pacsable_d$TRIP_ID, pacsable_d$SET_ID, pacsable_d$SPECIES_CODE, sep="-")
-if ( any (duplicated(dup_ind)) ){
-  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
-            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
-  # show duplicated records
-  print( pacsable_d[inds,] )
-  # Remove duplicate records
-  pacsable_d <- pacsable_d[!duplicated(pacsable_d),]
+return(cbind(x1,y1,x1sd,y1sd))
 }
 
-# Summaries
-dim(pacsable_d)
-head(pacsable_d)
-table(pacsable_d$FISHERY_SECTOR)
-table(pacsable_d$SPECIES_SCIENCE_NAME)
 
+threshold_points<-function(weights_kg,do_segmented=TRUE,boots=1000){
+  require(segmented)
+ # Indices<-NULL
+ # Index_data<-NULL
+ #  weights<-data1$Weight 
+  xo<-weights_kg[order(weights_kg)]
+  y<-trunc(rank(xo))/length(xo)
+  x<-xo/max(xo)
+ # y<-cumsum(xo)/sum(xo)
 
+ # gs<-sqrt((1-y)^2+(0-x)^2)
+ # g1<-min(gs)
+ # x1<-xo[which.min(gs)]
+ # y1<-y[which.min(gs)]
 
-#---------------------------------------------------------------------#
-# Get FOS data with coral and sponge by-catch records
-#test1<-DBI::dbGetQuery(db_connection(),"SELECT * FROM GFFOS.dbo.GF_D_OFFICIAL_FE_CATCH")
-fos_sql <- readLines("./sql/get-fos-records.sql")
-# Add to cwcs species to WHERE clause
-fos_sql <- inject_filter("AND S.SPECIES_CODE IN", cwcs, fos_sql)
-fos_sql <- paste(fos_sql, collapse = "\n")
-# Run query
-fos_d <- DBI::dbGetQuery( db_connection(), fos_sql )
+mindist<-data.frame(gs(xo))
+#  
+# gy<-y+(1-x)-1
+# yi<-max(gy)
+# x2<-xo[which.max(gy)]
+# y2<-y[which.max(gy)]
 
-# Check for duplicates of species records from a single finishing event
-dup_ind <- paste(fos_d$TRIP_ID, fos_d$EVENT_ID, fos_d$SPECIES_CODE, sep="-")
-if ( any (duplicated(dup_ind)) ){
-  inds <- c(which(duplicated(dup_ind, fromLast = FALSE)), 
-            which(duplicated(dup_ind, fromLast = TRUE))) %>% sort()
-  # show duplicated records
-  print( fos_d[inds,] )
-  # Remove duplicate records
-  fos_d <- fos_d[!duplicated(fos_d),]
+Youden<-data.frame(gy(xo))
+
+if(do_segmented==TRUE){
+seglm<-lm(y~xo) 
+seg1<-segmented.lm(seglm,seg.Z=~xo,npsi=3,control=seg.control(it.max=100,display=FALSE,alpha=0.0001))
+x3<-seg1$psi[3,2]
+x3sd<-seg1$psi[3,3]
+y3<-predict(seg1,newdata=data.frame(xo=x3),se.fit=TRUE)$fit
+y3sd<-predict(seg1,newdata=data.frame(xo=x3),se.fit=TRUE)$se.fit
+if(is.null(x3)){
+  x3<-NA
+  x3sd<-NA
+  y3<-NA
+  y3sd<-NA
+}
 }
 
-# Remove Event_ID 551255, duplicate with IPHC survey event
-fos_d <- fos_d[fos_d$EVENT_ID != 551255,]
+if(do_segmented==FALSE){
+  x3<-NA
+  x3sd<-NA
+  y3<-NA
+  y3sd<-NA
+}
 
-# Summaries
-dim(fos_d)
-head(fos_d)
-table(fos_d$FISHERY_SECTOR)
-table(fos_d$SPECIES_SCIENCE_NAME)
+out<-list(Indices=data.frame(Method=c("MinDist","YoudenIndex","Segmented"),weight=c(mindist$x1,Youden$x2,x3),percentile=c(mindist$y1,Youden$y2,y3),weight_se=c(mindist$x1sd,Youden$x2sd,x3sd),percentile_se=c(mindist$y1sd,Youden$y2sd,y3sd)),Index_data=data.frame(x=xo,y=y))
+return(out)
+}
 
+mygrobs<-list()
+m<-1
+m2<-NULL
+VME_thresholds<-NULL
+for(i in 1:length(VME_taxa)){   
+  for(j in 1:length(regions)){
+    for(k in 1:length(Gears)){
+      VME_thresholds1<-NULL
+      data1<-NULL
+      data1<-subset(cdata,cdata$VME_group==VME_taxa[i]&cdata$Region==regions[j]&cdata$Gear==Gears[k])
+      if(dim(data1)[1]<300){next}
+      
+      badi<-c(paste0(5,1,1),paste0(7,1,1),paste0(5,4,1),paste0(7,4,1))
+if(paste0(i,j,k)%in%badi){V1<-threshold_points(data1$Weight,FALSE)} 
+if(paste0(i,j,k)%nin%badi){V1<-threshold_points(data1$Weight,TRUE)} 
+ #     V1<-threshold_points(data1$Weight)
+      VME_thresholds1<-V1$Indices
+      Index_data<-V1$Index_data
+      VME_thresholds1$VME_taxa<-VME_taxa[i]
+      VME_thresholds1$Region<-regions[j]
+      VME_thresholds1$Gear<-Gears[k]
+      VME_thresholds<-rbind(VME_thresholds,VME_thresholds1)
+      
+         p1<-ggplot()+geom_point(data=Index_data,aes(x=x,y=y))+
+           geom_point(data=VME_thresholds1,aes(y=percentile,x=weight,color=Method),size=c(5,4,3))+theme(legend.position = "none")+
+           #geom_errorbarh(data=VME_thresholds1,aes(y=percentile,xmin=weight-weight_se, xmax=weight+weight_se), colour="red", width=.1) +
+           #geom_errorbar(data=VME_thresholds1,aes(x=weight,ymin=percentile-percentile_se, ymax=percentile+percentile_se), colour="purple", width=.1) +
+           xlab("Catch (kg)")+ylab("Cumulative catch distribution")+ggtitle(paste(VME_taxa[i],regions[j],"\n",Gears[k],sep=" "))
 
+            if(VME_taxa[i]=="Gorgonian"&Gears[k]=="Bottom trawl"){p1<-p1+theme(legend.position=c(0.75,0.25))}
+            if(VME_taxa[i]=="Gorgonian"&regions[j]=="Bering Sea"&Gears[k]=="Longline"){p1<-p1+theme(legend.position=c(0.75,0.25))}    
+            if(VME_taxa[i]=="Pennatulacean"&regions[j]=="Gulf of Alaska"&Gears[k]=="Longline"){p1<-p1+theme(legend.position=c(0.75,0.25))}    
+         
+mygrobs[[m]]<-ggplotGrob(p1)
+m2<-c(m2,regions[j])
+m<-m+1 
 
+      if(VME_taxa[i]=="Gorgonian"&regions[j]=="Aleutian Islands"&Gears[k]=="Bottom trawl"){figure5a<-ggplotGrob(p1)}  
+  if(VME_taxa[i]=="Pennatulacean"&regions[j]=="Bering Sea"&Gears[k]=="Longline"){figure5b<-ggplotGrob(p1)} 
+ if(VME_taxa[i]=="Demospongiae"&regions[j]=="Canada"&Gears[k]=="Bottom trawl"){figure5c<-ggplotGrob(p1)} 
+  if(VME_taxa[i]=="Alcyonacea"&regions[j]=="West Coast"&Gears[k]=="Bottom trawl"){figure5d<-ggplotGrob(p1)} 
 
-#---------------------------------------------------------------------#
-# Combine
+    }}}
 
-# Type
-gf_d$Type <- "Research"
-pachl_d$Type <- "Fishery"
-pactrawl_d$Type <-  "Fishery"
-pacsable_d$Type <- "Fishery"
-fos_d$Type <- "Fishery"
+png("./Figures/Figure6.png",width=7,height=7,units="in",res=300)
+grid.arrange(figure5a,figure5b,figure5c,figure5d)
+dev.off()
 
-# Source
-gf_d$Source <- "GFBio"
-pachl_d$Source <- "PacHL"
-pactrawl_d$Source <-  "PacTrawl"
-pacsable_d$Source <- "PacSable"
-fos_d$Source <- "FOS"
-
-# Survey or fishery section
-pachl_d$SURVEY <- pachl_d$FISHERY_SECTOR
-pactrawl_d$SURVEY <-  pactrawl_d$FISHERY_SECTOR
-pacsable_d$SURVEY <- pacsable_d$FISHERY_SECTOR
-fos_d$SURVEY <- fos_d$FISHERY_SECTOR
-
-# Add fishing event or set field for those missing one
-pachl_d$EVENT_ID <- paste(pachl_d$TRIP_ID, pachl_d$SET_ID, sep="_")
-pactrawl_d$EVENT_ID <-  paste(pactrawl_d$TRIP_ID, pactrawl_d$SET_ID, sep="_")
-
-#Add CATCH WEIGHT AND COUNT COLUMNS
-pachl_d$CATCH_WEIGHT <- pachl_d$OBFL_EST_WEIGHT
-pachl_d$CATCH_COUNT<-pachl_d$OBFL_EST_COUNT
-pactrawl_d$CATCH_WEIGHT <- pactrawl_d$LANDED+pactrawl_d$DISCARDED
-pactrawl_d$CATCH_COUNT<-NA
-pacsable_d$CATCH_WEIGHT <- pacsable_d$LANDED+pacsable_d$DISCARDED
-pacsable_d$CATCH_COUNT<-NA
-fos_d$TOTAL_RELEASED_COUNT[is.na(fos_d$TOTAL_RELEASED_COUNT)]<-0
-fos_d$LANDED_COUNT[is.na(fos_d$LANDED_COUNT)]<-0
-fos_d$TOTAL_RELEASED_ROUND_KG[is.na(fos_d$TOTAL_RELEASED_ROUND_KG)]<-0
-fos_d$BEST_RETAINED_ROUND_KG[is.na(fos_d$BEST_RETAINED_ROUND_KG)]<-0
-fos_d$CATCH_WEIGHT<-fos_d$BEST_RETAINED_ROUND_KG+fos_d$TOTAL_RELEASED_ROUND_KG
-fos_d$CATCH_COUNT<-fos_d$TOTAL_RELEASED_COUNT+fos_d$LANDED_COUNT
-
-# Combine
-fnames <-  c( "Type", "Source", "SURVEY", "TRIP_ID", "EVENT_ID", "GEAR",
-              "YEAR","MONTH","MAJOR_STAT_AREA_CODE", "START_LATITUDE","START_LONGITUDE",
-              "END_LATITUDE","END_LONGITUDE", "DEPTH",
-              "SPECIES_CODE", "SPECIES_SCIENCE_NAME", "SPECIES_COMMON_NAME","CATCH_WEIGHT","CATCH_COUNT" )                   
-allgfdat <- rbind(gf_d[fnames],pachl_d[fnames],pactrawl_d[fnames],pacsable_d[fnames],fos_d[fnames])
-
-# Summary
-dim(allgfdat)
-summary(allgfdat)
-
-# Convert longitude all to negatives
-allgfdat$START_LONGITUDE <- -1 * abs( allgfdat$START_LONGITUDE ) 
-allgfdat$END_LONGITUDE <- -1 * abs( allgfdat$END_LONGITUDE ) 
-
-
-#---------------------------------------------------------------------#
-# merge with groups
-gfdat <- merge(allgfdat, csdat[,-2], by="SPECIES_CODE" )
-
-
-# format
-names(gfdat) <- cap_words( names(gfdat) )
-names(gfdat) <- gsub("_Id", "_ID", names(gfdat) )
-gfdat$Species_Science_Name <- cap_words( gfdat$Species_Science_Name )
-gfdat$Species_Common_Name <- cap_words( gfdat$Species_Common_Name )
-gfdat$Species_Common_Name[gfdat$Species_Common_Name == "NANA"] <- ""
-gfdat$Gear <- cap_words( gfdat$Gear )
-gfdat$Survey <- cap_words( gfdat$Survey )
-
-#Convert/remove gear types
-#gfdat$Gear[gfdat$Gear == "Midwater trawl"] <- "Trawl"
-# Only handful of records with reel or handline gear, lump with longline
-#gfdat$Gear[gfdat$Gear == "Rod and reel"] <- "Longline"
-#gfdat$Gear[gfdat$Gear == "Handline"] <- "Longline"
-gfdat<-subset(gfdat,gfdat$Gear!="Handline"&gfdat$Gear!="Rod and reel")
+png(paste0("./Figures/FigureS2a.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Aleutian Islands")
+      grid.arrange(grobs=mygrobsai,ncol=2)
+     dev.off()       
+     
+png(paste0("./Figures/FigureS2b.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Bering Sea")
+      grid.arrange(grobs=mygrobsai,ncol=2)
+     dev.off()   
+     
+     
+png(paste0("./Figures/FigureS2c.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Gulf of Alaska")
+      grid.arrange(grobs=mygrobsai,ncol=2)
+     dev.off()   
+     
+png(paste0("./Figures/FigureS2d.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="Canada")
+      grid.arrange(grobs=mygrobsai,ncol=2)
+     dev.off()   
+     
+png(paste0("./Figures/FigureS2e.png"),width=7.5,height=10,units="in",res=300)
+  mygrobsai<-subset(mygrobs,m2=="West Coast")
+      grid.arrange(grobs=mygrobsai,ncol=2)
+     dev.off()   
+     
+     
+# 
+# 
+# p1<-ggplot(VME_thresholds[VME_thresholds$Gear=="Bottom trawl",])+geom_point(aes(x=VME_taxa,y=weight,color=Method))+
+#   geom_errorbar(data=VME_thresholds1,aes(x=VME_taxa,ymin=weight-weight_se, ymax=weight+weight_se), colour="black", width=.1) +
+#   theme(axis.text.x= element_text(angle = 90))+xlab("")+ylab("Weight (kg)")+ggtitle("Bottom trawl")
+# p1<-p1+facet_wrap(~Region,scales="free_y",ncol=2)
+# 
+# png("./Figures/Bottom_trawl_points.png",width=6,height=6,units="in",res=300) 
+#      print(p1)
+# dev.off() 
+# 
+# 
+# p1<-ggplot(VME_thresholds[VME_thresholds$Gear=="Longline",])+geom_point(aes(x=VME_taxa,y=weight,color=Method))+
+#   geom_errorbar(data=VME_thresholds1,aes(x=VME_taxa,ymin=weight-weight_se, ymax=weight+weight_se), colour="black", width=.1) +
+#   theme(axis.text.x= element_text(angle = 90))+xlab("")+ylab("Weight (kg)")+ggtitle("Longline")
+# p1<-p1+facet_wrap(~Region,scales="free_y",ncol=2)
+# 
+# png("./Figures/Longline_points.png",width=6,height=6,units="in",res=300) 
+#      print(p1)
+# dev.off()  
+# 
+# 
+# p1<-ggplot(VME_thresholds[VME_thresholds$Gear=="Pot",])+geom_point(aes(x=VME_taxa,y=weight,color=Method))+
+#   geom_errorbar(data=VME_thresholds1,aes(x=VME_taxa,ymin=weight-weight_se, ymax=weight+weight_se), colour="black", width=.1) +
+#   theme(axis.text.x= element_text(angle = 90))+xlab("")+ylab("Weight (kg)")+ggtitle("Pot")
+# p1<-p1+facet_wrap(~Region,scales="free_y",ncol=2)
+# 
+# png("./Figures/Pot_points.png",width=6,height=6,units="in",res=300) 
+#      print(p1)
+# dev.off()  
+# #Table 2
+# 
+ #p1<-ggplot(VME_thresholds[VME_thresholds$Gear!="Pot",])+geom_point(aes(x=VME_taxa,y=weight,color=Method))+
+     pos <- position_dodge(width=0.5)
+   p1<-ggplot()+geom_point(data=VME_thresholds,aes(x=VME_taxa,y=weight,color=Method,group=Method),position=pos)+
+   geom_errorbar(data=VME_thresholds,aes(x=VME_taxa,ymin=weight-weight_se, ymax=weight+weight_se,color=Method,group=Method),position=pos, colour="black", width=.1) +
+   theme(axis.text.x= element_text(angle = 90),legend.position="bottom",legend.title = element_blank())+xlab("")+ylab("Weight (kg)")+coord_flip()
+ p1<-p1+facet_grid(drop=FALSE,cols=vars(Gear),rows=vars(Region),scales="free")
+ p1
+ 
+ png("./Figures/Figure4b.png",width=6,height=6,units="in",res=300) 
+      print(p1)
+ dev.off()  
  
 
-# Summary
-summary(gfdat)
-str(gfdat)
-table(gfdat$Gear,gfdat$Type)
 
-CanData<-subset(gfdat,gfdat$Type=="Fishery")
-CanData<-data.frame(Year=CanData$Year,Haul=CanData$Event_ID,Gear=CanData$Gear,Region="BC",Species=CanData$Species_Common_Name,Weight=CanData$Catch_Weight)
+table2data<-aggregate(weight~Gear+VME_taxa,data=VME_thresholds,FUN="mean",na.rm=TRUE)
+table2data$Minimum<-aggregate(weight~Gear+VME_taxa,data=VME_thresholds,FUN="min",na.rm=TRUE)$weight
+table2data$Maximum<-aggregate(weight~Gear+VME_taxa,data=VME_thresholds,FUN="max",na.rm=TRUE)$weight
+
+table2data<-aggregate(weight~Gear+VME_taxa,data=VME_thresholds[VME_thresholds$Region!="Aleutian Islands",],FUN="mean",na.rm=TRUE)
+
+```
+```{r datasummary,echo=FALSE,message=FALSE,results='hide',warning=FALSE}
+
+# VME_thresholds$VME_group<-VME_thresholds$VME_taxa
+# 
+# png("Figures/FigureS2a.png",width=7,height=9,units="in",res=300)
+# p3<-ggplot(cdata[cdata$VME_group %in% VME_taxa&cdata$Region=="Aleutian_Islands",])+stat_ecdf(aes(Weight),geom='step')+ 
+#            geom_point(data=VME_thresholds[VME_thresholds$VME_group%in%VME_taxa&VME_thresholds$Region=="Aleutian_Islands",],aes(y=percentile,x=weight,color=Method))+
+#            xlab("Catch (kg)")+ylab("Cumulative catch distribution")
+# p3+facet_wrap(~VME_group+Gear,scales="free_x",ncol=3,drop=FALSE)
+# dev.off()
+# 
+# png("Figures/FigureS2b.png",width=7,height=9,units="in",res=300)
+# p3<-ggplot(cdata[cdata$VME_group %in% VME_taxa&cdata$Region=="Bering_Sea",])+stat_ecdf(aes(Weight),geom='step') + 
+#            geom_point(data=VME_thresholds[VME_thresholds$VME_group%in%VME_taxa&VME_thresholds$Region=="Bering_Sea",],aes(y=percentile,x=weight,color=Method))+
+#            xlab("Catch (kg)")+ylab("Cumulative catch distribution")
+# p3+facet_wrap(~VME_group+Gear,scales="free_x",ncol=3,drop=FALSE)
+# dev.off()
+# 
+# png("Figures/FigureS2c.png",width=7,height=9,units="in",res=300)
+# p3<-ggplot(cdata[cdata$VME_group %in% VME_taxa&cdata$Region=="Gulf_Of_Alaska",])+stat_ecdf(aes(Weight),geom='step') + 
+#            geom_point(data=VME_thresholds[VME_thresholds$VME_group%in%VME_taxa&VME_thresholds$Region=="Guof_Of_Alaska",],aes(y=percentile,x=weight,color=Method))+
+#            xlab("Catch (kg)")+ylab("Cumulative catch distribution")
+# p3+facet_wrap(~VME_group+Gear,scales="free_x",ncol=3,drop=FALSE)
+# dev.off()
+# 
+# png("Figures/FigureS2d.png",width=7,height=9,units="in",res=300)
+# p3<-ggplot(cdata[cdata$VME_group %in% VME_taxa&cdata$Region=="BC",])+stat_ecdf(aes(Weight),geom='step') + 
+#            geom_point(data=VME_thresholds[VME_thresholds$VME_group%in%VME_taxa&VME_thresholds$Region=="BC",],aes(y=percentile,x=weight,color=Method))+
+#            xlab("Catch (kg)")+ylab("Cumulative catch distribution")
+# p3+facet_wrap(~VME_group+Gear,scales="free_x",ncol=3,drop=FALSE)
+# dev.off()
+# 
+# png("Figures/FigureS2e.png",width=7,height=9,units="in",res=300)
+# p3<-ggplot(cdata[cdata$VME_group %in% VME_taxa&cdata$Region=="West Coast",])+stat_ecdf(aes(Weight),geom='step') + 
+#            geom_point(data=VME_thresholds[VME_thresholds$VME_group%in%VME_taxa&VME_thresholds$Region=="West Coast",],aes(y=percentile,x=weight,color=Method))+
+#            xlab("Catch (kg)")+ylab("Cumulative catch distribution")
+# p3+facet_wrap(~VME_group+Gear,scales="free_x",ncol=3,drop=FALSE)
+# dev.off()
+
+```
+
+```{r alaskacameraversusbycatch,echo=FALSE,message=FALSE,results='hide',warning=FALSE,cache=TRUE}
+cdata1<-subset(alldata,alldata$Region!="BC"&alldata$Region!="West Coast")
+cdata1<-aggregate(Weight~VME_group2+Gear+Region+Haul+Year,data=cdata1,FUN="sum")
+cdata1$Region<-factor(cdata1$Region,levels=c("Bering_Sea","Aleutian_Islands","Gulf_Of_Alaska","BC","West Coast"),labels=c("Bering Sea","Aleutian Islands","Gulf of Alaska","Canada","West Coast"))
+
+vdata1<-read.csv("CameraData.csv",header=TRUE)
+vdata1<-pivot_longer(vdata1,cols=Acanthogorgia.sp:Porifera,names_to="Species",values_to="Density")
+vdata1<-merge(vdata1,SpeciesList,by="Species",all.x=TRUE)
+vdata1<-subset(vdata1,vdata1$Density>0)
+vdata1$Region[vdata1$region=="AI"]<-"Aleutian Islands"
+vdata1$Region[vdata1$region=="GOA"]<-"Gulf of Alaska"
+vdata1$Region[vdata1$region=="EBS"]<-"Bering Sea"
+vdata1<-aggregate(Density~VME_group2+Region+Deployment_ID,data=vdata1,FUN="sum")
+vdata1$Density<-vdata1$Density/10000
+
+
+VME_taxa_ak<-c("Gorgonian","Antipatharia","Hydrocoral","Pennatulacean","Porifera")   
+Gears<-c("Bottom trawl","Longline","Pot")
+probs<-seq(0,1,.05)
+
+for(i in 1:length(VME_taxa_ak)){
+  for(j in 1:length(Gears)){
+png(paste0("./Figures/",VME_taxa_ak[i],"_",Gears[j],"_cdfs.png"),width=10,height=6,units="in",res=300)
+p3<-ggplot()+stat_ecdf(data=cdata1[cdata1$VME_group==VME_taxa_ak[i]&cdata1$Gear==Gears[j],],aes(Weight/max(Weight)),geom='step')+ stat_ecdf(data=vdata[vdata$VME_group==VME_taxa_ak[i],],aes(Density/max(Density)),geom='step',color="coral")
+p3<-p3+facet_wrap(~Region,scales="free",ncol=3,drop=FALSE)
+print(p3)
+dev.off()
+}}
+
+quants<-NULL
+regions<-unique(vdata1$Region)
+for(i in 1:length(VME_taxa_ak)){
+  for(j in 1:length(regions)){
+    for(k in 1:length(Gears)){
+Camera<-quantile(vdata1$Density[vdata1$VME_group2==VME_taxa_ak[i]&vdata1$Region==regions[j]],probs=probs,type=8)
+Fishery<-quantile(cdata1$Weight[cdata1$VME_group2==VME_taxa_ak[i]&cdata1$Region==regions[j]&cdata1$Gear==Gears[k]],probs=probs,type=8)
+Cameralog<-quantile(log(vdata1$Density[vdata1$VME_group2==VME_taxa_ak[i]&vdata1$Region==regions[j]]),probs=probs,type=8)
+Fisherylog<-quantile(log(cdata1$Weight[cdata1$VME_group2==VME_taxa_ak[i]&cdata1$Region==regions[j]&cdata1$Gear==Gears[k]]),probs=probs,type=8)
+qgorgv<-data.frame(Camera,Fishery,Cameralog,Fisherylog)
+qgorgv$Region<-regions[j]
+qgorgv$VME_group<-VME_taxa_ak[i]
+qgorgv$Gear<-Gears[k]
+quants<-rbind(quants,qgorgv)
+}}}
+
+
+# p1<-ggplot()+geom_point(data=quants[quants$VME_group=="Gorgonian",],aes(x=Camera,y=Fishery,group=Region,color=Region))+geom_smooth(data=quants[quants$VME_group=="Gorgonian",],aes(x=Camera,y=Fishery,group=Region,color=Region),method="gam", formula = y ~ s(x, bs = "cs",k=4))
+# p1<-p1+facet_wrap(~Gear,scales="free")
+# p1
+
+for(i in 1:length(VME_taxa_ak)){
+p1<-ggplot()+geom_point(data=quants[quants$VME_group==VME_taxa_ak[i],],aes(x=Cameralog,y=Fisherylog,group=Region,color=Region))+geom_smooth(data=quants[quants$VME_group==VME_taxa_ak[i],],aes(x=Cameralog,y=Fisherylog,group=Region,color=Region),method="lm")+xlab("log(Camera density)")+ylab("log(Bycatch weight)")+
+  ggtitle(VME_taxa_ak[i])
+p1<-p1+facet_wrap(~Gear,scales="free")
+png(paste0("Figures/Figure6_",VME_taxa_ak[i],".png"),width=7,height=7,units="in",res=300)
+print(p1)
+dev.off()
+}
+
+quants<-subset(quants,quants$Camera>0&quants$Fishery>0)
+quants$Fisherylog[quants$Gear=="Pot"&quants$VME_group=="Antipatharia"]<-NA
+
+p1<-ggplot()+geom_point(data=quants,aes(x=Cameralog,y=Fisherylog,group=Region,color=Region))+geom_smooth(data=quants,aes(x=Cameralog,y=Fisherylog,group=Region,color=Region),method="lm")+xlab("log(Camera density)")+ylab("log(Bycatch weight)")+theme(legend.position="bottom")+scale_color_viridis_d()
+p1<-p1+facet_grid(drop=FALSE,cols=vars(VME_group),rows=vars(Gear))
+
+png(paste0("Figures/Figure7.png"),width=7,height=7,units="in",res=300)
+print(p1)
+dev.off()
+
+
 
 
 ```
 
 
-```{r datasummary}
 
-p1<-ggplot(AlaskaData)+stat_ecdf(aes(Weight,color=Gear,group=Gear),geom='step')
-p1+facet_wrap(~Year,scales="free_x")
 
-p2<-ggplot(CanData)+stat_ecdf(aes(Weight,color=Gear,group=Gear),geom='step')
-p2+facet_wrap(~Year,scales="free_x")
+```{r makepredictions,echo=FALSE,warning=FALSE,results='hide',message=FALSE}
+VMEdensity<-1/5
 
-quantile(AlaskaData$Weight[AlaskaData$Species=="GORGONIAN"])
-p1<-ggplot(AlaskaData[AlaskaData$Species=="GORGONIAN",])+geom_histogram(aes(Weight))
-p1+facet_wrap(~Gear,scales="free")
+regdata<-subset(quants,quants$Fishery>0&quants$Camera>0)
+glm1<-lm(log(Fishery)~Cameralog+Gear+Region+VME_group+Gear*Cameralog+VME_group*Cameralog+Region*Gear+Region*Cameralog,data=regdata,family="gaussian")
+glm1<-lm(log(Fishery)~Cameralog+Gear+Region+VME_group+Gear*Cameralog+VME_group*Cameralog+Region*Gear,data=regdata,family="gaussian")
+#summary(glm1)
+table3data<-anova(glm1)
+
+newdata<-regdata
+newdata$Cameralog<-log(VMEdensity)
+newdata$predicted<-exp(predict(glm1,newdata=newdata,interval='confidence')[,1])
+newdata$lwr<-exp(predict(glm1,newdata=newdata,interval='confidence')[,2])
+newdata$upr<-exp(predict(glm1,newdata=newdata,interval='confidence')[,3])
+
+newdata<-aggregate(cbind(predicted,lwr,upr)~Gear+VME_group+Region,data=newdata,FUN="mean")
+
+p1<-ggplot(newdata)+geom_point(aes(x=Gear,y=predicted,group=Region,color=Region))+
+  geom_errorbar(data=newdata,aes(x=Gear,ymin=lwr, ymax=upr,color=Region), width=.1)+
+  xlab("")+ylab("Weight (kg)")+theme(axis.text.x= element_text(angle = 90))+xlab("")+ylab("Weight (kg)")
+p1<-p1+facet_wrap(~VME_group,scales="free_y")
+
+png("Figures/Figure8.png",width=7,height=7,units="in",res=300)
+print(p1)
+dev.off()
+
+
 ```
 
+
+```{r exampleprediction,echo=FALSE,warning=FALSE,results='hide',message=FALSE}
+VMEdensity2<-5/100
+
+regdata<-subset(quants,quants$Fishery>0&quants$Camera>0)
+glm2<-lm(log(Fishery)~Cameralog+Gear+VME_group+Gear*Cameralog+VME_group*Cameralog,data=regdata,family="gaussian")
+
+newdata2<-regdata
+newdata2$Cameralog<-log(VMEdensity)
+newdata2$predicted<-exp(predict(glm2,newdata=newdata2,interval='confidence')[,1])
+newdata2$lwr<-exp(predict(glm2,newdata=newdata2,interval='confidence')[,2])
+newdata2$upr<-exp(predict(glm2,newdata=newdata2,interval='confidence')[,3])
+
+newdata2<-aggregate(cbind(predicted,lwr,upr)~Gear+VME_group,data=newdata2,FUN="mean")
+
+p1<-ggplot(newdata2)+geom_point(aes(x=Gear,y=predicted))+
+  geom_errorbar(data=newdata2,aes(x=Gear,ymin=lwr, ymax=upr), width=.1)+
+  xlab("")+ylab("Weight (kg)")+theme(axis.text.x= element_text(angle = 90))+xlab("")+ylab("Weight (kg)")
+p1<-p1+facet_wrap(~VME_group,scales="free_y")
+
+png("Figures/Figure8example.png",width=7,height=7,units="in",res=300)
+print(p1)
+dev.off()
+
+```
 
 
 # Results
 
+The Aleutian Islands longline fishery had the highest frequency of occurrence of VME indicator taxa in the observed catch followed by the Aleutian Islands bottom trawl fishery (Figure 2). In general the frequency of occurrence of catch of VME indicator taxa was higher among the longline gears than the bottom trawl or pot gears. However, the patterns in observed total catch weights were somewhat different, as catches of VME indicator taxa were highest in bottom trawls for all regions (Figure 2). There has generally been a reduction in the weight of catches of VME indicator taxa in British Columbia over time, but no apparent patterns over time in the other regions (Figure 3). 
+
+The mean catch when they were observed  was higher for sponges (porifera, Hexactinellidas and Demospongiaes) in the Aleutian Islands than the other regions (Figure 4). This pattern was also apparent for most upright and branching corals (e.g. gorgonians), and some of the other coral groups (stony corals and Alcyonacea as a grouped taxa). Pennatulacean bycatch was higher in the eastern Bering Sea than any of the other regions across all gear types (Figure 4). The gear type with the highest bycatch overall of VME indicator taxa were bottom trawls followed by longline gear and pot gear. Longline gear in the eastern Bering Sea were particularly notable in having higher bycatch on average than even bottom trawls in the eastern Bering Sea (mean = 42 kg, SE = 0.70 for longline gear and mean = 8 kg SE = 1.0 for bottom trawls), this pattern was also true in the Gulf of Alaska. Although the range of catch weights generally overlapped among regions for a gear type and VME indicator taxa group, there were significant differences (p < 0.05) in the mean values across all regions for all gear types for each indicator taxa (Figure 4) as indicated by analysis of variance and Tukey's post-hoc comparisons.
+
+## Fishery cumulative catch thresholds
+
+The distributions of bycatch of VME indicator taxa for almost all gear types, regions and taxa were heavily right-hand skewed. This was true for taxa with very few observations (e.g. Alcyonacea in the west coast pot fishery with n = 54 observed catches, Figure 5) and large numbers of observations (e.g. gorgonians in the Aleutian Islands bottom trawl fisheries, Figure 5). See the supplemental information for the full array of bycatch from all combinations of VME indicator taxa, gear type and region. The skewness of the bycatch data resulted in distributions where the median was often at least an order of magnitude lower than the mean (Figure 5). So for example, the mean catch of Porifera in bottom trawls in British Columbia was 16 kg, while the median catch (meaning 50% of the catches were above and below) was 0.9 kg. 
+
+For the most part, the cumulative catch-based thresholds suggested by the Youden Index and the minimum distance metrics were similar, if not exactly the same within taxonomic group-region-gear type combinations (Figure 6 and Supplemental Figures and Tables). Where the Youden Index and minimum distance metrics were slightly different, their standard error bars overlapped indicating that the difference was not statistically significant (Figure 7). The segmented regression tended to estimate a cumulative catch-based threshold (third break point) that was lower (and almost always significantly lower) than the two other methods. Reflecting the relative cumulative catches in each of the regions, the cumulative catch-based thresholds were generally highest in the Aleutians and lowest on the US west coast (Figure 7). When averaged across regions and break points, Porifera had the highest cumulative catch-based threshold of any of the taxonomic groups. Pennatulaceans stood out in the longline gear, with high cumulative catch-based thresholds (> 75 kg) in the eastern Bering Sea only (Figure 7). There were not enough occurrences of bycatch in the pot fishery to estimate cumulative catch-based thresholds (see supplemental material for cumulative catch curves for the pot fishery). 
+
+## Percentile regression thresholds
+
+The regression of percentiles of log-transformed observed VME indicator taxa density against percentiles of log-transformed VME indicator bycatch in Alaskan fisheries resulted in consistent patterns among gear types and regions for most fishing gears (Figure 8). The full model included all possible interaction terms. Two could not be included due to the unbalanced design (Gear-VME_taxa, Region-VME_taxa). The density-region term was insignificant (p = 0.48) and was removed from the best-fitting model. In the best fitting model all main effects (gear type, VME taxa and region) were significant, as well as the covariate interactions between log-transformed VME density observed in the camera and VME taxa and region. The gear type-region interaction term was also significant (Table 3). 
+
+The predicted percentile regression thresholds were highest in the Aleutian Islands for bottom trawl gear across all taxonomic groupings of VME (Figure 9). The predicted percentile regression thresholds were lower for longline gear and tended to be slightly higher in the eastern Bering Sea. For pot gear, predicted percentile regression thresholds were uniformly low across all taxonomic groups and regions. For gorgonians, the estimated threshold ranged from `r round(newdata$predicted[newdata$Gear=="Bottom trawl"&newdata$Region=="Gulf_Of_Alaska"&newdata$VME_group=="gorgonian"],1)` kg in the Gulf of Alaska to `r round(newdata$predicted[newdata$Gear=="Bottom trawl"&newdata$Region=="Bering_Sea"&newdata$VME_group=="gorgonian"],1)` kg in eastern Bering Sea in bottom trawls predicted at a camera density of 0.5 colonies*$m^-2$ (Table 4). For Porifera, the values were larger ranging from  `r round(newdata$predicted[newdata$Gear=="Bottom trawl"&newdata$Region=="Gulf_Of_Alaska"&newdata$VME_group=="Porifera"],0)` kg in the Gulf of Alaska to `r round(newdata$predicted[newdata$Gear=="Bottom trawl"&newdata$Region=="Bering_Sea"&newdata$VME_group=="Porifera"],0)` kg in the eastern Bering Sea. The threshold values determined by regressing percentiles of observed density against percentiles of catch were uniformly lower than the threshold values estimated by the minimum distance, Youden Index or segmented regression for the same regions and gear types in Alaska.  
 
 # Discussion
 
-# Acknowledgements
+Unsurprisingly, bycatch of VME indicator taxa in bottom trawls was higher than for other gears across multiple taxa and all of the observed regions. Fishery bycatch of VME indicator taxa generally agreed with the observed density of those taxa in each region. Areas with high density (e.g. sponges in the Aleutian Islands or Pennatulaceans in the eastern Bering Sea) yielded high bycatch in fisheries. The shape of the distribution of both the fishery bycatch data and the camera survey density data were similarly highly skewed with large right-handed tails. These general characteristics of the two data sources and their agreement provides some comfort that the patterns and relationships developed in the analysis are complementary. Of the two methods (bycatch data only or percentile regression), the percentile regressions tended to generate lower bycatch thresholds across all taxa. However, these comparisons could only be made for data in Alaska, as camera surveys for density were not available for the other regions. 
 
-# References
+## Management changes
 
-# Tables
+Time trends were evident in coral and sponge catch over the regional time series. In part this may have been due to changes in fishing regulations that were designed to protect benthic habitat in all three jurisdictions. In British Columbia an IFQ system was put in place to manage bycatch of corals and sponges in 2007 (Wallace et al. 2015). This catch accounting system succeeded in reducing the amount of bycatch overall in the fishery and also caused a shift in fishing effort away from coral and sponge hotspots (Gale et al. 2022). In the Aleutian Islands of Alaska and on the U.S. west coast, spatial closures to protect known or suspected concentrations of sponge and coral and to protect essential fish habitat were implemented in 2005 and 2006 respectively. In the Aleutian Islands, these closures essentially froze the existing fishing footprint, while on the west coast closures actively excluded fishing from areas that were previously fished. These changes in management in did not result in such clear declines in bycatch of corals and sponges (at least for Alaska), as was the case in British Columbia. However, this may be due to the fact that existing fishing patterns did not change as much due to the freezing of fishing footprints, as occurred with the implementation of the IFQ system. There have also been changes in the ability and consistency of observers ability to identify corals and sponges in bycatch from fisheries over time. The advent of new field guides, increased training and interest and taxonomic changes have made corals and sponges easier to document and identify. This is evident in the declines of the broader categories of taxonomic groupings, such as Alcyonacea in the West Coast and British Columbia regions. Both the temporal changes in management and reporting likely impacted the results of this study to some degree. It should also be noted that better resolution of the taxonomy of bycatch species would be useful for cases such as the Alaska region where corals and sponges are not often reported into smaller taxonomic divisions like family.
 
-# Figures
+## Catch efficiency
 
+Few if any studies have measured the efficiency of different gear types in capturing benthic invertebrates. The most comprehensive review of catchability of VME indicator taxa is for bottom trawls and can be found in SPRFMO (2022). The authors examined published and unpublished data sets from a variety of regions and substrate types and found that the catchability estimates by bottom trawls were generally < 5%, but could range as high as 27% for some taxa. However, SPRFMO (2022) also noted that many of these estimates were both highly variable and based on very small sample sizes. Studies in Alaska have shown that a single pass of a bottom trawl can remove a substantial biomass of corals and detach a high proportion (~27%) of the colonies in its path (Krieger 2001). A single study that examined density of sponges along experimental bottom trawl tow paths found that the densities for two types of upright sponges were 16% and 31% lower in an experimentally trawled area versus background densities (Freese et al 2001). The rate of damaged sponges remaining in the trawl path was 67% (Freese 2001) and the overall density of sponges in the trawled transects had not recovered 13 years post-trawling (Malecha and Heifetz 2017). Moran and Stevenson (2000). estimated a standard demersal trawl reduced benthic invertebrate density by ~16%, with only 4% of the removed organisms retained in the net.  Removals of 13.8% of sponges and 3% of gorgonians by a bottom trawl in Australia was observed by Wassenburg et al. (2002), however the removals varied by both organism height (with those higher than 50 cm most likely to be impacted) and morphotype (with broad-based sponges more likely to be impacted). Sainsbury et al. (1997) looked at the catchability of sponges >15 cm in height and found that 89% were removed by a trawl. Catchability from longline, trap gear or longlined pots has not been studied. 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Caveats
+The analysis comparing the stereo-camera data and the fishery bycatch data required strong assumptions regarding the validity of the density estimates from the underwater camera and the proportionality of the bycatch data to that density. These assumptions could not be tested during the analyses, so the results should be viewed in that context. There were no indications that the density of VME indicator taxa were biased, as the estimates were collected via random stratified sampling and should estimate the density accurately. However, the fishing activity was likely spatially biased. The fisheries operating in the different regions target different species that may not fully represent available habitats. For example, the majority of bottom trawls in the eastern Bering Sea were targeting Walleye Pollock or flatfish assemblages. As such, they were more likely to occur in flat-soft sediment areas where structure forming invertebrates except Pennatulaceans were absent. This is reflected in the low overall frequency of occurrence of VME indicator taxa (except Pennatulaceans) for this region. The impact of spatial bias and potential bias in the habitats sampled by the fishery may have been mitigated somewhat in this analysis by using only those bottom trawl hauls that captured benthic invertebrates.
+The taxonomic resolution of the fishery data used here is also a source of uncertainty. In some cases, the taxonomic resolution of Alcyonaceans (coral or bryozoan) recorded by observer programs in Alaska is less specific than the taxonomic resolution of the camera data and includes a taxa (bryozoan) that is not in fact a coral. However, given the small size and lack of hard structure in bryozoans their contribution to the overall weight of bycatch may have been minimal. The broader category Alcyonacean certainly included some members of the Gorgonian families as well in all regions. Previous studies have also found that at-sea observers (whose primary duties are to assess and sample targeted fish and invertebrate catches) would need extensive training to more successfully identify corals to lower taxonomic levels and given the more pressing data needs to support fisheries stock assessment, additional training has not generally been given a high priority (Stone et al. 2015). These characteristics of the bycatch data certainly made the comparisons with camera data more variable.  
+This analysis is meant to use the best available data to try to determine thresholds for catch in the North Pacific. Specifically it is meant as a data-informed method for setting gear and VME taxa specific thresholds for bycatch that would trigger implementation of a spatial closure and a move-on rule. The analysis indirectly attempts to measure catchability of VME indicator taxa using the distributions of catches. Ideally, data would be collected that could directly measure catchability and damage rates of benthic organisms in the deep-sea. Selectivity for fishes in fishing gear has long been studied to support stock assessment analysis (e.g. MacClennan 1992). However, this data is not easily attained for non-motile VME indicator taxa. In part this is due to their tendency to break apart when contacted by the gear (Freese 1999), which makes it difficult to judge the original size of the organism when it comes up in the net. Another difficulty is that the individuals may not be entirely removed or even removed at all by the fishing gear, yet can still experience mortality or damage (NRC 2002, Stone 2014, Malecha and Heifetz 2017). This has necessitated either correlative assessments, such as the study described here, or experimental studies, such as those where underwater imagery is used to look for mortality and damage after known trawling events (Freese 1999, Wassenburg 2002). More of these types of studies with larger sample sizes, fishing gears that include non-mobile gears, and at varying densities of benthic invertebrates are needed. 
+
+## Comparisons to other work
+As has been observed in other studies attempting to set data-based encounter thresholds, it is difficult to estimate a threshold that is applicable across wide regions. Most previous attempts to set thresholds have used some version of cumulative catches utilizing bycatch only data (Kenchington et al. 2009, Parker et al. 2009, Geange et al. 2020),  but fisheries management organizations have generally taken their own approach to quantifying thresholds, including less quantifiable methods such as expert opinion (Ardron et al. 2014) or a percentile of the historical catch (Wallace et al. 2016).  Geange et al. (2020) specifically called for using area specific thresholds, but also recognized that data paucity forced them to combine data across areas and taxa. In the current study, averaging across break points and regions provides one alternative for an estimated threshold in the absence of known VME indicator taxa densities from underwater camera footage for British Columbia and the U.S. West Coast. However, this estimate is very sensitive to the data from the Aleutian Islands. Removing the Aleutian Islands reduces the percentile-based threshold by over 1/2 for both Porifera and the other coral taxa (gorgonians, Antipatharia, and Alcyonacea). So although it is clear that thresholds should be regionally developed in order to be meaningful, the lack of image-based density data from surveys that fully sample regions and substrate conditions limits development of more specific relationships.
+
+## Conclusions and Recommendation
+The percentile regression thresholding method indicated that within a region the density of VME indicator taxa was linearly related to bycatch in that same region. Threshold VME bycatch values developed using this method could be easily converted to densities of VME indicator species. In contrast, encounter thresholds based on cumulative catch from bycatch data only were able to distinguish break points, but with no biological basis for these breakpoints being meaningful (Ardron et al. 2014, Geange et al. 2022). This is a significant disadvantage for this method relative to the percentile regression based approach, as the regression can be used to explicitly decide on a VME prevalence to protect. For example, if managers wished to protect Gorgonians at densities above a density of `r VMEdensity2*100` individuals per 100 $m^2$ from bottom trawling, a bycatch weight of `r round(newdata2$predicted[newdata2$VME_group=="Gorgonian"&newdata2$Gear=="Bottom trawl"],1)` kg would be used to trigger an encounter based closure using the average regression coefficients developed for this taxa. Recent studies from Rowden et al. (2020) and Warawa et al. (in prep) have identified densities of VME indicator taxa using visual imagery that are associated with thresholds in diversity. These VME indicator taxa densities could then be used in the percentile regression to define encounter thresholds that were relevant to the ecology of the benthic systems. So, in the absence of better available data, we recommend using the percentile regression approach for setting VME encounter thresholds even across regions. However, future work would benefit from data collection that supported development of regional and gear specific percentile regressions and ideally would concentrate on estimating catchability by gear type for VME indicator taxa directly using experimentally collected data across a wide range of seafloor substrates and VME densities. 
+
+```{r recommendations,echo=FALSE,}
+recommendationtable<-data.frame(Gear=rep(c("Bottom trawl","Longline or gillnet","Pot"),each=6),VME_indicator_taxa=rep(c("Alcyonacea","gorgonian","Antipatharia","Scleractinian","Hexactinellida","Demospongiae"),3),Threshhold_kg=c(19,12,42,19,78,78,19,3,10,19,19,19,19,1,1,19,2,2))
+recommendationtable<-pivot_wider(recommendationtable,names_from=Gear,values_from=Threshhold_kg)
+
 ```
 
 
+# Acknowledgements
+Many researchers at the Alaska Fishery Science Center helped to collect the data used in the visual analysis. In particular R. Wilborn, D. Jones, K. Williams, R. Towler, M. Sigler and P. Malecha were instrumental in the collection and processing of the image data over many years. We would also like to thank the innumerable observers who have collected the weights of coral and sponge bycatch from commercial fisheries in the North Pacific (Alaska, West Coast and British Columbia observer programs). Finally, this manuscript benefited from discussions with colleagues at the NPFC at many points; V. Kulik, K. Sowada, O. Katugin, J. Curtis, D. Warawa and A. Baco-Taylor. 
+
+# References
+
+Alaska Fisheries Science Center (AFSC). 2023 Observer Sampling Manual. Fisheries Monitoring and Analysis Division, North Pacific Groundfish Observer Program. AFSC, 7600 Sand Point Way N.E., Seattle, Washington, 98115.
+
+Archipelago Marine Research Ltd. (AMR) 2005. Groundfish fisheries observer resource manual. 
+
+Ardron, J. A., Clark, M. R., Penney, A. J., Hourigan, T. F., Rowden, A. A., Dunstan, P. K., et al. (2014). A systematic approach towards the identification
+and protection of vulnerable marine ecosystems. Mar. Policy 49, 146–154. doi:10.1016/j.marpol.2013.11.017
+
+Auster, P. J., Gjerde, K., Heupel, E., Watling, L., Grehan, A., and Rogers, A. D.(2011). Definition and detection of vulnerable marine ecosystems on the high
+seas: problems with the “move-on” rule. ICES J. Mar. Sci. 68, 254–264. doi:10.1093/icesjms/fsq074
+
+Baco AR, Ross R, Althaus F, Amon D, Bridges AEH, Brix S, Buhl-Mortensen P, Colaco A, Carreiro-Silva M, Clark MR, Du Preez C, Franken M, Gianni M, Gonzalez-Mirelis G, Hourigan T, Howell K, Levin LA, Lindsay DJ, Molodtsova TN, Morgan N, Morato T, Mejia-Mercado BE, O’Sullivan D, Pearman T, Price D, Robert K, Robson L, Rowden AA, Taylor J, Taylor M, Victorero L, Watling L, Williams A, Xavier JR, Yesson C. 2023. Towards a scientific community consensus on designating Vulnerable Marine Ecosystems from imagery. PeerJ 11:e16024 https://doi.org/10.7717/peerj.16024
+
+Buhl-Mortensen L, Vanreusal A, Gooday AJ, Levin LA, Priede IG, et al. (2010) Biological structures as a source of habitat heterogeneity and biodiversity on the
+deep ocean margins. Mar Ecol 31: 21–50
+
+Clark, M. R., and Rowden, A. A. (2009). Effect of deep water trawling on the macroinvertebrate assemblages of seamounts on the Chatham Rise. New Zealand. Deep Sea Res. I 56, 1540–1554. doi: 10.1016/j.dsr.2009.04.015
+
+Efron, B. and Tibshirani, R.J. (1993) An Introduction to the Bootstrap. Chapman and Hall, New York. https://doi.org/10.1007/978-1-4899-4541-9
+
+Food and Agriculture Organisation [FAO] (2009). International Guidelines for the Management of Deep-Sea Fisheries in theHigh Seas. Rome: Food and Agriculture Organisation, 73.
+
+Freese, L., Auster, P. J., Heifetz, J., and Wing, B. L. (1999). Effects of trawling on seafloor habitat and associated invertebrate taxa in the Gulf of Alaska.Mar. Ecol. Prog. Ser. 182, 119–126. doi: 10.3354/meps182119
+
+Freese, J. L. 2001. Trawl-induced damage to sponges observed from a research submersible. Marine Fisheries Review, 63: 7–13.
+
+Gale, K. Forrest, R., Rooper, C. N., Nephin, J., Wallace, S., Driscoll, J., and Rubridge, E. (2022) Evaluation of collaboratively-developed management measures to reduce coral and sponge bycatch in a fully-monitored multispecies trawl fishery. CJFAS. 79: 1420-1434. https://doi.org/10.1139/cjfas-2021-0274
+
+Geange, S. W., Rowden, A. A., Nicol, S., Bock, T., and Cryer, M. 2020. A data-informed approach for identifying move-on encounter thresholds for vulnerable marine ecosystem indicator taxa. Front. Mar. Sci. 7:155. doi: 10.3389/fmars.2020.00155
+
+Heifetz, J., Stone, R. P., and Shotwell, S. K. 2009. Damage and disturbance to coral and sponge habitat of the Aleutian Archipelago. Marine Ecology Progress Series, 397: 295–303.
+
+Kenchington, E., Murillo, F. J., Lirette, C., Sacau, M., Koen-Alonso, M., Kenny, A., et al. (2014). Kernel density surface modelling as a means to identify significant concentrations of vulnerable marine ecosystem indicators. PLoS One 9:e109365. doi: 10.1371/journal.pone.0109365
+
+Kenchington, E., Cogswell, A., Lirette, C., and Murillo, F. J. (2009). The Use of Density Analyses to Delineate Sponge Grounds and Other Benthic VMEs from Trawl Survey Data. NAFO SCR Doc. 09/6. Dartmouth, NS: Northwest Atlantic Fisheries Organization.
+
+Koslow, J. A., Gowlett-Holmes, K., Lowry, J. K., O’hara, T., Poore, G. C. B., andWilliams, A. (2001). Seamount benthic macrofauna off southern Tasmania: community structure and impacts of trawling. Mar. Ecol. Progr. Ser. 213, 111–125. doi: 10.3354/meps213111
+
+Krieger, K. J. (2001) Coral (Primnoa) impacted by fishing gear in the Gulf of Alaska. In Proceedings of the First International Symposium on Deep-Sea Corals, pp. 106–116. Ed. by J. H. M. Willison, J. Hall, S. E. Gass, E. L. R. Kenchington, M. Butler, and P. Doherty. Ecology Action Centre and Nova Scotia Museum, Halifax, Nova Scotia.
+
+Linley TD, Lavaleye M, Maiorano P, Bergman M and others (2017) Effects of cold-water corals on fish diversity and density (European Continental Margin: Arctic, NE Atlantic and Mediterranean Sea): data from three baited lander systems. Deep Sea Res II 145: 8-21
+
+MacLennan, D. N. (1992). Fishing gear selectivity: an overview. Fisheries Research 13:201-204.
+
+Malecha, P., and Heifetz, J. (2017) Long-term effects of bottom trawling on large sponges in the Gulf of Alaska. Cont. Shelf Res. 150: 18–26.
+doi:10.1016/j.csr.2017.09.003.
+
+Moran, M. J., and Stephenson, P. C. 2000. Effects of otter trawling on macrobenthos and management of demersal scalefish fisheries on the continental shelf of northwestern Australia. – ICES Journal of Marine Science, 57: 510–516.
+
+North Pacific Fisheries Commission (NPFC) (2023). Sustainable use and conservation handbook. Available at  https://www.npfc.int/sustainable-use-and-conservation-handbook-2023
+
+Northwest Fisheries Science Center (NWFSC) (2023). West Coast Groundfish Observer Program 2023 Training Manual. https://doi.org/10.25923/z81b-qb51
+
+NRC (National Research Council). 2002. Effects of Trawling and Dredging on Seafloor Habitat. National Academy Press,Washington, DC.
+
+Parker, S. J., Penney, A. J., and Clark, M. R. (2009). Detection criteria for managing trawl impacts on vulnerable marine ecosystems in high seas fisheries of the South Pacific Ocean. Mar. Ecol. Prog. Ser. 397, 309–317. doi: 10.3354/meps08115
+
+Piechaud, N., and Howell, K. L. (2022). Fast and accurate mapping of fine scale abundance of a VME in the deep sea with computer vision. Ecol. Info. 71:101786. https://doi.org/10.1016/j.ecoinf.2022.101786 
+
+R Core Team (2022). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. https://www.R-project.org/.
+
+Rooper CN, Wilborn RE, Goddard P, Williams K, Towler R, Hoff GR. 2018. Validation of deep-sea coral and sponge distribution models in the Aleutian Islands, Alaska. ICES J. Mar. Sci. 75:199-209.
+
+Rooper CN, Sigler M, Goddard P, Malecha PW, Towler R, Williams K, Wilborn R, Zimmermann M (2016) Validation and improvement of species distribution models for structure forming invertebrates in the eastern Bering Sea with an independent survey. Mar. Ecol. Prog. Ser. 551:117-130
+
+Ruopp, M. D., Perkins, N. J., Whitcomb, B. W., and Schisterman, E. F. (2008). Youden Index and optimal cut-point estimated from observations affected by a lower limit of detection. Biometrical J. 50, 419–430. doi: 10.1002/bimj.200710415
+
+Rowden, A. A., Anderson, O. F., Georgian, S. E., Bowden, D. A., Clark, M. R., Pallentin, A., et al. (2017). High-resolution habitat suitability models for the conservation and management of vulnerable marine ecosystems on the Louisville Seamount Chain, South Pacific Ocean. Front. Mar. Sci. 4:335. doi: 10.3389/fmars.2017.00335
+
+Rowden, A. A., Pearman, T. R. R., Bowden, D. A., Anderson, O. F., and Clark, M. R. (2020) Determining Coral Density Thresholds for Identifying Structurally Complex Vulnerable Marine Ecosystems in the Deep Sea. Front. Mar. Sci. 7:95. doi: 10.3389/fmars.2020.00095
+
+Sainsbury, K. J., Campbell, R. A., Lindholm, R., and Whitelaw, A. W. 1997. Experimental management of an Australian multispecies fishery: examining the possibility of trawl induced habitat modification. In Global Trends, Fisheries Management, pp. 107–112. Ed. by E. K. Pikitch, D. D. Huppert, and M. P. Sissenwine. American Fisheries Society Seattle, WA, USA. 352 pp.
+
+Sigler, M. S., Rooper, C. N., Goddard, P., Wilborn, R. E., and Williams, K. (2023) Alaska deep sea coral and sponge assemblages are well-defined and mostly predictable from local environmental conditions. MEPS 712:67-85. https://doi.org/10.3354/meps14317 
+
+South Pacific Regional Fisheries Management Organization (SPRFMO) (2023). Conservation and management measure for the management of bottom fishing in the SPRFMO Convention area. CMM 03-2023. Available at https://www.sprfmo.int/fisheries/conservation-and-management-measures/bottom-fishing/
+
+South Pacific Regional Fisheries Management Organization (SPRFMO) (2021). Determination of optimal move-on distance in SPRFMO bottom fisheries. SC9-DW07. Available at https://www.sprfmo.int/assets/Meetings/SC/9th-SC-2021/deepwater-wg/SC9-DW07-Determination-of-optimal-move-on-distance-in-SPRFMO-bottom-fisheries.pdf
+
+South Pacific Regional Fisheries Management Organization (SPRFMO) (2022). Further analysis of the catchability of VME indicator taxa and the design of a related research programme. SC10-DW04. Available at https://www.sprfmo.int/assets/Meetings/SC/10th-SC-2022/SC10-DW04-Further-analysis-of-VME-indicator-taxa-catchability-and-the-design-of-a-related-research-programme-NZ.pdf
+
+Stone, R. P. 2014. The Ecology of Deep-Sea Coral and Sponge Habitats of the Central Aleutian Islands of Alaska. NOAA Professional Paper NMFS 16. U.S. Department of Commerce, Seattle, WA.
+
+Stone, R., D. Stevenson, and S. Brooke. 2015. Assessment of a pilot study to collect coral bycatch data from the Alaska commercial fishing fleet. U.S. Dep. Commer., NOAA Tech. Memo. NMFS-AFSC-296, 45 p.doi:10.7289/V5B56GPZ.
+
+Tilbury, J. B., Van Eetvelt, W. J., Garibaldi, J. M., Curnsw, J. S. H., and Ifeachor, E. C. (2000). Receiver operating characteristic analysis for intelligent medical systems-a new approach for finding confidence intervals. IEEE T. Bio-Med. Eng. 47, 952–963. doi: 10.1109/10.846690
+
+Vito M. R. Muggeo (2008). segmented: an R Package to Fit Regression Models with Broken-Line Relationships. R News, 8/1, 20-25.   https://cran.r-project.org/doc/Rnews/.
+
+Wallace, S., Turris, B., Driscoll, J., Bodtker, K., Mose, B., and Munro, G. 2015. Canada’s Pacific Groundfish Trawl Habitat Agreement: a global first in an ecosystem approach to bottom trawl impacts. Mar. Pol. 60:240–248. doi:10.1016/j.marpol.2015.06.028.
+
+Wassenberg, T. J., Dews, G., and Cook, S. D. (2002) The impact of fish trawls on megabenthos (sponges) on the north-west shelf of Australia. Fisheries Research, 58: 141–151.
+
+Watling, L., and Auster, P. J. (2017). Seamounts on the high seas should be managed as vulnerable marine ecosystems. Front.Mar. Sci. 4:14. doi:10.3389/fmars.2017.00014
+
+Watling L, France SC, Pante E, Simpson A (2011) Biology of deep-water octocorals. Adv Mar Biol 60: 41-122 
+
+Williams, K., C.N. Rooper, and R. Towler. 2010. Use of stereo camera systems for assessment of rockfish abundance in untrawlable areas and for recording pollock behavior during midwater trawls. Fish Bull 108:352-362
+
+Youden, W. J. (1950). Index for rating diagnostic tests. Cancer 3, 32–35. doi:10.1002/1097-0142(1950)3:1<32::aid-cncr2820030106>3.0.co;2-3
+
+\newpage
+\blandscape
+
+# Tables
+
+```{r Table1, echo=FALSE}
+table1data<-aggregate(Year~Gear+Region+VME_group+VME_group2,data=alldata,FUN="length")
+table1data<-pivot_wider(table1data,names_from=Region,values_from=Year)
+colnames(table1data)<-c("Gear type","Observer classification", "VME indicator grouping","Aleutian Islands","British Columbia","eastern Bering Sea","Gulf of Alaska", "US West Coast")
+table1data<-table1data[,c(2,3,1,6,4,7,5,8)]
+table1data %>%
+kbl(caption = "Taxonomic grouping of data collected from fisheries in the northeast Pacific Ocean with the five study regions (Aleutian Islands, eastern Bering Sea, Gulf of Alaska, British Columbia and the U.S.A. west coast) and number of observations for each taxonomic grouping.") %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+\elandscape
+
+\newpage
+
+```{r Table2, echo=FALSE}
+
+table2data<-aggregate(Density~Region+VME_group,data=vdata,FUN="length")
+table2data<-pivot_wider(table2data,names_from=Region,values_from=Density)
+colnames(table2data)<-c("VME indicator grouping","Aleutian Islands","Gulf of Alaska","eastern Bering Sea")
+table1data<-table1data[,c(1,3,2)]
+table2data%>%
+kbl(caption = "Summary of number of transects with observations of vulnerable marine ecosystem indicator taxa for stereo-camera surveys from Alaska in 2012-2019.") %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+```
+
+\newpage
+
+```{r Table3, echo=FALSE}
+table3data[,c(2:4)]<-round(table3data[,c(2:4)],1)
+table3data[,5]<-round(table3data[,5],4)
+table3data%>%kbl(caption = "Results of analysis of covariance relating the percentiles of catch weight in the commercial fisheries to the percentiles of density for stereo-camera surveys in regions of Alaska by gear type.") %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+```
+
+\newpage
+\blandscape
+
+```{r Table4, echo=FALSE}
+table4data<-newdata
+table4data$Threshold<-paste0(round(table4data$predicted,2)," (",round(table4data$lwr,2)," - ",round(table4data$upr,2),")")
+table4data<-table4data[,c(3,1,2,7)]
+
+table4data<-pivot_wider(table4data,names_from=VME_group,values_from=Threshold)
+
+table4data%>%kbl(caption = "Predicted thresholds encounter weights (and confidence intervals) for VME indicator taxa in the regions of Alaska by gear type using percentile regression method.",align="c") %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")%>%
+  collapse_rows(columns = 1:2, valign = "middle")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+```
+
+```{r Table5, echo=FALSE,eval=FALSE}
+recommendationtable %>%kbl(caption = "Recommended catch thresholds for move on rules based on the analyses of data from the Northeast Pacific Ocean.",align="c") %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")%>%
+  collapse_rows(columns = 1:2, valign = "middle")%>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+
+```
+\elandscape
+
+
+\newpage
+
+# Figures
+
+```{r Figure1, fig.cap="Map of the northeast Pacific Ocean with the five study regions (Aleutian Islands, eastern Bering Sea, Gulf of Alaska, British Columbia and the U.S.A. west coast. Also shown are the locations of stereo-camera transects conducted in Alaska ecosystems from 2012-2019.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure1.png")
+
+```
+
+\newpage
+
+```{r Figure2, fig.cap="Frequency of occurrence (top panels) and total weight (bottom panels) of each vulnerable marine ecosystem indicator taxa captured by gear type and region.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure2.png")
+
+```
+
+\newpage
+
+```{r Figure3, fig.cap="Time series of total annual catch of vulnerable marine ecosystem indicator taxa by gear type in each of the five regions of the NE Pacific Ocean.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure3.png")
+
+```
+
+\newpage
+
+```{r Figure4, fig.cap="Mean catch weight of VME indicator taxa by gear type and region in instances where there was positive catch. Note values are plotted on a log-scale", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure4.png")
+
+```
+
+\newpage
+
+```{r Figure5, fig.cap="Histograms of four example vulnerable marine ecosystem indicator taxa by gear type in four selected regions of the NE Pacific Ocean. Dashed lines indicate the 90% quantile (red), the mean catch (orange) and the median catch (blue). Additional combinations of taxa and gear type by region can be found in the supplemental material.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure5.png")
+
+```
+
+\newpage
+
+```{r Figure6, fig.cap="Cumulative frequency distributions of four example vulnerable marine ecosystem indicator taxa by gear type in four selected regions of the NE Pacific Ocean. Additional combinations of taxa and gear type by region can be found in the supplemental material.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure6.png")
+
+```
+
+\newpage
+
+```{r Figure7, fig.cap="Vulnerable marine ecosystem indicator taxa bycatch thresholds estimated from the cumulative frequency of bycatch data.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure4b.png")
+
+```
+
+
+\newpage
+
+```{r Figure8, fig.cap="Linear regressions of percentile-percentile plots of log commercial fishery bycatch and log density from stereo-camera surveys of vulnerable marine ecosystem indicator taxa by gear type in each of the three regions of Alaska.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure7.png")
+
+```
+
+\newpage
+
+```{r Figure9, fig.cap="Predicted thresholds by gear type, region (Alaska only) and taxonomic grouping of VME. Error bars indicate 95% confidence intervals.", echo=FALSE}
+
+knitr::include_graphics("./Figures/Figure8.png")
+
+```
+
+
+\newpage
+
+# Supplemental Material
+
+```{r FigureS1a, fig.cap="Histograms of vulnerable marine ecosystem indicator taxa by gear type in the Aleutian Islands. Dashed lines indicate the 90% quantile (red), the mean catch (orange) and the median catch (blue).", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS1a.png")
+
+```
+
+\newpage
+
+```{r FigureS1b, fig.cap="Histograms of vulnerable marine ecosystem indicator taxa by gear type in the eastern Bering Sea. Dashed lines indicate the 90% quantile (red), the mean catch (orange) and the median catch (blue).", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS1b.png")
+
+```
+\newpage
+
+```{r FigureS1c, fig.cap="Histograms of vulnerable marine ecosystem indicator taxa by gear type in the Gulf of Alaska. Dashed lines indicate the 90% quantile (red), the mean catch (orange) and the median catch (blue).", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS1c.png")
+
+```
+\newpage
+
+```{r FigureS1d, fig.cap="Histograms of vulnerable marine ecosystem indicator taxa by gear type in British Columbia. Dashed lines indicate the 90% quantile (red), the mean catch (orange) and the median catch (blue).", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS1d.png")
+
+```
+\newpage
+
+```{r FigureS1e, fig.cap="Histograms of vulnerable marine ecosystem indicator taxa by gear type in the U.S. west coast. Dashed lines indicate the 90% quantile (red), the mean catch (orange) and the median catch (blue).", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS1a.png")
+
+```
+\newpage
+
+
+```{r FigureS2a, fig.cap="Cumulative frequency distributions of bycatch of vulnerable marine ecosystem indicator taxa by gear type in the Aleutian Islands from 2002 - 2022. Points indicate the fit threshold values (where n > 300) for the minimum distance (MinDist), segmented regression (Segmented) and Youden Index (YoudenIndex) methods.", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS2a.png")
+
+```
+
+\newpage
+
+```{r FigureS2b, fig.cap="Cumulative frequency distributions of bycatch of vulnerable marine ecosystem indicator taxa by gear type in the eastern Bering Sea from 2002 - 2022. Points indicate the fit threshold values (where n > 300) for the minimum distance (MinDist), segmented regression (Segmented) and Youden Index (YoudenIndex) methods.", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS2b.png")
+
+```
+\newpage
+
+```{r FigureS2c, fig.cap="Cumulative frequency distributions of bycatch of vulnerable marine ecosystem indicator taxa by gear type in the Gulf of Alaska from 2002 - 2022. Points indicate the fit threshold values (where n > 300) for the minimum distance (MinDist), segmented regression (Segmented) and Youden Index (YoudenIndex) methods.", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS2c.png")
+
+```
+\newpage
+
+```{r FigureS2d, fig.cap="Cumulative frequency distributions of bycatch of vulnerable marine ecosystem indicator taxa by gear type in British Columbia from 2002 - 2022. Points indicate the fit threshold values (where n > 300) for the minimum distance (MinDist), segmented regression (Segmented) and Youden Index (YoudenIndex) methods.", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS2d.png")
+
+```
+\newpage
+
+```{r FigureS2e, fig.cap="Cumulative frequency distributions of bycatch of vulnerable marine ecosystem indicator taxa by gear type in the U.S. west coast from 2002 - 2022. Points indicate the fit threshold values (where n > 300) for the minimum distance (MinDist), segmented regression (Segmented) and Youden Index (YoudenIndex) methods.", echo=FALSE}
+
+knitr::include_graphics("./Figures/FigureS2e.png")
+
+```
+
+```{r FigureS3, fig.cap="Cumulative frequency distributions of density of vulnerable marine ecosystem indicator taxa in camera surveys of Alaska regions from 2012 - 2019. ", echo=FALSE}
+
+knitr::include_graphics("./Figures/summplemental_cdfs_camera.png")
+
+```
+
+\newpage
+
+```{r table2b,echo=FALSE}
+table2bdata<-VME_thresholds[,c(1,2,6,7,8)]
+table2bdata[,2]<-round(table2bdata[,2],0)
+
+table2bdata%>%kbl(caption = "Threshold results from using fishery data only to develop the Youden Index, minimum distance and segmented regression points.",longtable=TRUE) %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position","repeat_header")
+
+
+```
+
+```{r tableS2,echo=FALSE}
+table2sdata<-pivot_wider(cdata2,values_from = value,names_from = type)
+
+table2sdata%>%kbl(caption = "Frequency of occurrence calculated as the number of observed occurrences divided by the number of observed hauls and total weight (kg * 10^-6) of catch aggregated across all observed hauls of each VME indicator taxa captured by gear type and region.",longtable=TRUE) %>%
+  kable_classic(full_width = F, html_font = "Cambria")%>%
+  kableExtra::kable_styling(latex_options = "hold_position","repeat_header")
+
+
+```
